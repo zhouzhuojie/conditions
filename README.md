@@ -12,12 +12,12 @@ import (
     "fmt"
     "strings"
 
-    "github.com/oleksandr/conditions"
+    "github.com/zhouzhuojie/conditions"
 )
 
 func main() {
     // Our condition to check
-    s := "($0 > 0.45) AND ($1 == `ON` OR $2 == \"ACTIVE\") AND $3 == false"
+    s := `([foo] > 0.45) AND ([bar] == "ON" OR [baz] == "ACTIVE")`
 
     // Parse the condition language and get expression
     p := conditions.NewParser(strings.NewReader(s))
@@ -27,7 +27,7 @@ func main() {
     }
 
     // Evaluate expression passing data for $vars
-    data := map[string]interface{}{"$0": 0.12, "$1": "OFF", "$2": "ACTIVE", "$3": false}
+    data := map[string]interface{}{"foo": 0.12, "bar": "OFF", "baz": "ACTIVE"}
     r, err := conditions.Evaluate(expr, data)
     if err != nil {
         // ...
@@ -36,11 +36,8 @@ func main() {
     // r is false
     fmt.Println("Evaluation result:", r)
 }
-
 ```
 
-## Where do we use it?
+## Credit
 
-Here is a diagram for a sample FBP flow (created using [FlowMaker](https://github.com/cascades-fbp/flowmaker)). You can see how we configure the ContextA process with a condition via IIP packet.
-
-![](https://raw.githubusercontent.com/oleksandr/conditions/master/Example.png)
+[https://github.com/oleksandr/conditions](https://github.com/oleksandr/conditions)
