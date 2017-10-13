@@ -12,6 +12,8 @@ var invalidTestData = []string{
 	"",
 	"A",
 	"[var0] == DEMO",
+	"[var0] == CA",
+	"[var0] == PA",
 	"[var0] == 'DEMO'",
 	"![var0]",
 	"[var0] <> `DEMO`",
