@@ -20,7 +20,10 @@ var invalidTestData = []string{
 	"{foo} in [foobar]",
 	"{foo} in [foobar, baz]",
 	"{foo} in [\"foobar\", baz]",
+	"{foo} in {foobar",
+	"{foo} in [foobar",
 	"{foo} in ['foobar']",
+	"{foo} in ['foobar'",
 	"{foo} not in [foobar]",
 }
 
