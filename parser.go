@@ -9,6 +9,8 @@ import (
 	"text/scanner"
 )
 
+const maxArrayLen = 65536
+
 // Parser encapsulates the scanner and responsible for returning AST
 // composed from statements read from a given reader.
 type Parser struct {
@@ -318,7 +320,7 @@ func (p *Parser) scanArray(tt string) (rune, string, error) {
 	var ttTmp string
 	var sep string
 
-	for {
+	for i := 0; i < maxArrayLen; i++ {
 		t, ttTmp = p.scan()
 		if t == ']' {
 			return t, tt, nil
@@ -326,6 +328,7 @@ func (p *Parser) scanArray(tt string) (rune, string, error) {
 
 		tt = tt + sep + ttTmp
 	}
+	return t, tt, fmt.Errorf("parsing error: no ] found in array syntax")
 }
 
 // extract {variable} to variable
