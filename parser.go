@@ -296,13 +296,21 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 		case string:
 			values := []string{}
 			for _, v := range mapVal {
-				values = append(values, v.(string))
+				str, ok := v.(string)
+				if !ok {
+					return nil, fmt.Errorf("the items in the array are not all string")
+				}
+				values = append(values, str)
 			}
 			return &SliceStringLiteral{Val: values}, err
 		case float64:
 			values := []float64{}
 			for _, v := range mapVal {
-				values = append(values, v.(float64))
+				f, ok := v.(float64)
+				if !ok {
+					return nil, fmt.Errorf("the items in the array are not all number")
+				}
+				values = append(values, f)
 			}
 			return &SliceNumberLiteral{Val: values}, err
 		default:

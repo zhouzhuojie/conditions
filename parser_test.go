@@ -24,6 +24,9 @@ var invalidTestData = []string{
 	"{foo} in [foobar",
 	"{foo} in ['foobar']",
 	"{foo} in ['foobar'",
+	"{foo} in [1, 2, \"3\"]",
+	"{foo} in [\"3\", 2, 1]",
+	"{foo} in [\"3\", 2, 1",
 	"{foo} not in [foobar]",
 }
 
