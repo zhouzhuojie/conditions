@@ -90,21 +90,21 @@ func (p *Parser) scanWithMapping() (Token, string) {
 		} else {
 			tok = ILLEGAL
 		}
-	case '[':
-
-		// TODO : capter les tableau de string comme ["hello", "world", "foo"] => StringLiteral
+	case '{':
 		var err error
 		t, tt, err = p.scanArg()
 		if err != nil {
-			p.unscan()
-			t, tt, err = p.scanArray(tt)
-			if err == nil {
-				tok = ARRAY
-			} else {
-				tok = ILLEGAL
-			}
+			tok = ILLEGAL
 		} else {
 			tok = IDENT
+		}
+	case '[':
+		var err error
+		t, tt, err = p.scanArray("")
+		if err == nil {
+			tok = ARRAY
+		} else {
+			tok = ILLEGAL
 		}
 	case '!':
 		t, tt = p.scan()
@@ -328,8 +328,8 @@ func (p *Parser) scanArray(tt string) (rune, string, error) {
 	}
 }
 
-// extract [variable] to variable
-// extract [variable][key1][key1] to variable.key1.key2
+// extract {variable} to variable
+// extract {variable}{key1}{key2} to variable.key1.key2
 // handle variable name which start with a "@"
 func (p *Parser) scanArg() (rune, string, error) {
 	var t rune
@@ -346,9 +346,9 @@ func (p *Parser) scanArg() (rune, string, error) {
 			continue
 		}
 		t, _ := p.scan()
-		if t == ']' {
+		if t == '}' {
 			ti, _ := p.scan()
-			if ti == '[' {
+			if ti == '{' {
 				sep = "."
 				continue
 			} else {
@@ -357,7 +357,7 @@ func (p *Parser) scanArg() (rune, string, error) {
 			return t, tt, nil
 		}
 
-		if t != ']' {
+		if t != '}' {
 			return t, tt, fmt.Errorf("Args error")
 		}
 	}
