@@ -1,6 +1,7 @@
 package conditions
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -81,6 +82,13 @@ func evaluateSubtree(expr Expr, args map[string]interface{}) (Expr, error) {
 		case reflect.Float64:
 			return &NumberLiteral{Val: float64(args[index].(float64))}, nil
 		case reflect.String:
+			if num, ok := args[index].(json.Number); ok {
+				f, err := num.Float64()
+				if err != nil {
+					return falseExpr, fmt.Errorf("Unsupported JSON Number %v type: %s", args[index], kind)
+				}
+				return &NumberLiteral{Val: f}, nil
+			}
 			return &StringLiteral{Val: args[index].(string)}, nil
 		case reflect.Bool:
 			return &BooleanLiteral{Val: args[index].(bool)}, nil

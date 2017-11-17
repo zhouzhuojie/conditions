@@ -1,6 +1,7 @@
 package conditions
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -82,6 +83,8 @@ var validTestData = []struct {
 	{"\"OFF\"", nil, false, true},
 	{"`ON`", nil, false, true},
 	{"{var0} == \"OFF\"", map[string]interface{}{"var0": "OFF"}, true, false},
+
+	// AND
 	{"{var0} > 10 AND {var1} == \"OFF\"", map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
 	{"({var0} > 10) AND ({var1} == \"OFF\")", map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
 	{"({var0} > 10) AND ({var1} == \"OFF\") OR true", map[string]interface{}{"var0": 1, "var1": "ON"}, true, false},
@@ -89,6 +92,7 @@ var validTestData = []struct {
 	{"{foo}{dfs}{a} == true and {bar} == true", map[string]interface{}{"foo.dfs.a": true, "bar": true}, true, false},
 	{"{@foo}{a} == true and {bar} == true", map[string]interface{}{"@foo.a": true, "bar": true}, true, false},
 	{"{foo}{unknow} == true and {bar} == true", map[string]interface{}{"foo.dfs": true, "bar": true}, false, true},
+	{"{foo} == 123", map[string]interface{}{"foo": json.Number("123"), "bar": "something"}, true, false},
 
 	// OR
 	{"{foo} == true OR {foo} > 1", map[string]interface{}{"foo": true}, false, true},
