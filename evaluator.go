@@ -126,6 +126,39 @@ func evaluateSubtree(expr Expr, args map[string]interface{}) (Expr, error) {
 					snl.Val = append(snl.Val, float64(v))
 				}
 				return snl, nil
+			case []json.Number:
+				snl := &SliceNumberLiteral{}
+				for _, v := range args[index].([]json.Number) {
+					f, _ := v.Float64()
+					snl.Val = append(snl.Val, f)
+				}
+				return snl, nil
+			case []interface{}:
+				items := args[index].([]interface{})
+				if len(items) != 0 {
+					item := items[0]
+					switch item.(type) {
+					case string:
+						snl := &SliceStringLiteral{}
+						for _, v := range items {
+							snl.Val = append(snl.Val, v.(string))
+						}
+						return snl, nil
+					case float64:
+						snl := &SliceNumberLiteral{}
+						for _, v := range items {
+							snl.Val = append(snl.Val, v.(float64))
+						}
+						return snl, nil
+					case json.Number:
+						snl := &SliceNumberLiteral{}
+						for _, v := range items {
+							f, _ := v.(json.Number).Float64()
+							snl.Val = append(snl.Val, f)
+						}
+						return snl, nil
+					}
+				}
 			}
 		}
 		return falseExpr, fmt.Errorf("Unsupported argument %s type: %s", n.Val, kind)
