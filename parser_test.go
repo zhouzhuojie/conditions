@@ -347,7 +347,23 @@ func BenchmarkParser(b *testing.B) {
 	expr, _ := p.Parse()
 
 	for n := 0; n < b.N; n++ {
-		r, _ := Evaluate(expr, args)
-		fmt.Println(r)
+		Evaluate(expr, args)
+	}
+}
+
+func BenchmarkLongSliceString(b *testing.B) {
+	items := []string{}
+	for i := 0; i <= 10000; i++ {
+		items = append(items, fmt.Sprintf(`"%v"`, i))
+	}
+
+	cond := fmt.Sprintf(`{foo} IN [%s]`, strings.Join(items, ","))
+	args := map[string]interface{}{"foo": "123"}
+
+	p := NewParser(strings.NewReader(cond))
+	expr, _ := p.Parse()
+
+	for n := 0; n < b.N; n++ {
+		Evaluate(expr, args)
 	}
 }
