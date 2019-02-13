@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -100,7 +101,9 @@ func (n *NumberLiteral) Args() []string {
 
 type SliceStringLiteral struct {
 	Val []string
-	m   map[string]struct{}
+
+	m    map[string]struct{}
+	lock sync.RWMutex
 }
 
 // String returns a string representation of the literal.
