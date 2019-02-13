@@ -531,12 +531,18 @@ func getMapString(e Expr) (map[string]struct{}, error) {
 	switch n := e.(type) {
 	case *SliceStringLiteral:
 		if n.m != nil {
+			n.lock.RLock()
+			defer n.lock.RUnlock()
 			return n.m, nil
 		}
+
+		n.lock.Lock()
+		defer n.lock.Unlock()
 		n.m = make(map[string]struct{})
 		for _, item := range n.Val {
 			n.m[item] = struct{}{}
 		}
+
 		return n.m, nil
 	default:
 		return nil, fmt.Errorf("Literal is not a slice of string: %v", n)
