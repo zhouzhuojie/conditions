@@ -18,6 +18,7 @@ var invalidTestData = []string{
 	"{var0} == 'DEMO'",
 	"!{var0}",
 	"{var0} <> `DEMO`",
+	"{foo} in []",
 	"{foo} in [foobar]",
 	"{foo} in [foobar, baz]",
 	"{foo} in [\"foobar\", baz]",
@@ -140,6 +141,7 @@ var validTestData = []struct {
 
 	//{CON}AINS
 	{`{foo} contains "2"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
+	{`{foo} contains "2"`, map[string]interface{}{"foo": []string{}}, false, false},
 	{`{foo} contains 2`, map[string]interface{}{"foo": []string{"1", "2"}}, false, true},
 	{`{foo} contains "2" and {foo} contains "1"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
 	{`{foo} contains "2" and {foo} contains "0"`, map[string]interface{}{"foo": []string{"1", "2"}}, false, false},

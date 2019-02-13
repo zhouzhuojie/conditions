@@ -99,7 +99,8 @@ func evaluateSubtree(expr Expr, args map[string]interface{}) (Expr, error) {
 		case reflect.Slice:
 			switch args[index].(type) {
 			case []string:
-				return &SliceStringLiteral{Val: args[index].([]string)}, nil
+				ssl := NewSliceStringLiteral(args[index].([]string))
+				return ssl, nil
 			case []int:
 				snl := &SliceNumberLiteral{}
 				for _, v := range args[index].([]int) {
@@ -143,11 +144,12 @@ func evaluateSubtree(expr Expr, args map[string]interface{}) (Expr, error) {
 					item := items[0]
 					switch item.(type) {
 					case string:
-						snl := &SliceStringLiteral{}
+						val := []string{}
 						for _, v := range items {
-							snl.Val = append(snl.Val, v.(string))
+							val = append(val, v.(string))
 						}
-						return snl, nil
+						ssl := NewSliceStringLiteral(val)
+						return ssl, nil
 					case float64:
 						snl := &SliceNumberLiteral{}
 						for _, v := range items {
@@ -530,19 +532,6 @@ func getSliceNumber(e Expr) ([]float64, error) {
 func getMapString(e Expr) (map[string]struct{}, error) {
 	switch n := e.(type) {
 	case *SliceStringLiteral:
-		if n.m != nil {
-			n.lock.RLock()
-			defer n.lock.RUnlock()
-			return n.m, nil
-		}
-
-		n.lock.Lock()
-		defer n.lock.Unlock()
-		n.m = make(map[string]struct{})
-		for _, item := range n.Val {
-			n.m[item] = struct{}{}
-		}
-
 		return n.m, nil
 	default:
 		return nil, fmt.Errorf("Literal is not a slice of string: %v", n)
