@@ -236,6 +236,10 @@ func TestFloat64Equal(t *testing.T) {
 	epsilon := 1e-6
 	assert.True(t, float64Equal(0.01, 0.01, epsilon))
 	assert.True(t, float64Equal(0.01, 0.01000001, epsilon))
+	assert.True(t, float64Equal(1e6, 1e6, epsilon))
+	assert.True(t, float64Equal(1e6, 1e6+1e-7, epsilon))
+	assert.True(t, float64Equal(1e10, 1e10, epsilon))
+	assert.False(t, float64Equal(1e10, 1e10+1, epsilon))
 	assert.False(t, float64Equal(0.01, 0.0100001, epsilon))
 	assert.False(t, float64Equal(0.0, 0.0000001, epsilon))
 	assert.False(t, float64Equal(0, 0.0000000000000000001, epsilon))
