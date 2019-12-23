@@ -166,8 +166,11 @@ var validTestData = []struct {
 	{`{foo} not contains 0`, map[string]interface{}{"bar": []string{"1", "2"}}, false, true},
 
 	//{=~
-	{"{status} =~ /^5\\d\\d/", map[string]interface{}{"status": "500"}, true, false},
-	{"{status} =~ /^4\\d\\d/", map[string]interface{}{"status": "500"}, false, false},
+	{`{status} =~ /^5\d\d/`, map[string]interface{}{"status": "500"}, true, false},
+	{`{status} =~ /^4\d\d/`, map[string]interface{}{"status": "500"}, false, false},
+	{`{status} =~ /foo/`, map[string]interface{}{"status": "foobar"}, true, false},
+	{`{status} =~ "foo"`, map[string]interface{}{"status": "foobar"}, true, false},
+	{`{status} =~ "foo"`, map[string]interface{}{"status": "bar"}, false, false},
 
 	//{!~
 	{"{status} !~ /^5\\d\\d/", map[string]interface{}{"status": "500"}, false, false},
