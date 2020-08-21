@@ -79,6 +79,8 @@ var validTestData = []struct {
 	{"56.43", nil, false, true},
 	{"{var5}", nil, false, true},
 	{"{var0} > -100 AND {var0} < -50", map[string]interface{}{"var0": -75.4}, true, false},
+	{"{var5-type-2}", nil, false, true},
+	{"{var5-type-2} == 1", map[string]interface{}{"var5-type-2": 1}, true, false},
 	{"{var0}", map[string]interface{}{"var0": true}, true, false},
 	{"{var0}", map[string]interface{}{"var0": false}, false, false},
 	{"\"OFF\"", nil, false, true},
