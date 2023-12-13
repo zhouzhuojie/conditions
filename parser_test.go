@@ -33,7 +33,6 @@ var invalidTestData = []string{
 }
 
 func TestInvalid(t *testing.T) {
-
 	var (
 		expr Expr
 		err  error
@@ -103,13 +102,13 @@ var validTestData = []struct {
 	{"{foo} > 100 OR {foo} < 99 ", map[string]interface{}{"foo": 100}, false, false},
 	{"{foo}{dfs} == true or {bar} == true", map[string]interface{}{"foo.dfs": true, "bar": true}, true, false},
 
-	//XOR
+	// XOR
 	{"false XOR false", nil, false, false},
 	{"false xor true", nil, true, false},
 	{"true XOR false", nil, true, false},
 	{"true xor true", nil, false, false},
 
-	//NAND
+	// NAND
 	{"false NAND false", nil, true, false},
 	{"false nand true", nil, true, false},
 	{"true nand false", nil, true, false},
@@ -160,12 +159,15 @@ var validTestData = []struct {
 	{`{foo} contains 2`, map[string]interface{}{"foo": []json.Number{"3"}}, false, false},
 	{`{foo} contains 2`, map[string]interface{}{"foo": []interface{}{json.Number("2")}}, true, false},
 	{`{foo} contains 2`, map[string]interface{}{"foo": []interface{}{json.Number("3")}}, false, false},
+	{`{foo} contains "2"`, map[string]interface{}{"foo": []interface{}{"1", 2}}, false, true},
+	{`{foo} contains 2`, map[string]interface{}{"foo": []interface{}{1, "2"}}, false, true},
 
 	//{NOT}CONTAINS
 	{`{foo} not contains "2"`, map[string]interface{}{"foo": []string{"1", "2"}}, false, false},
 	{`{foo} not contains "0"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
 	{`{foo} not contains 0`, map[string]interface{}{"foo": []string{"1", "2"}}, false, true},
 	{`{foo} not contains 0`, map[string]interface{}{"bar": []string{"1", "2"}}, false, true},
+	{`{foo} not contains "2"`, map[string]interface{}{"foo": []interface{}{"1", 0}}, false, true},
 
 	//{=~
 	{`{status} =~ /^5\d\d/`, map[string]interface{}{"status": "500"}, true, false},
@@ -180,7 +182,6 @@ var validTestData = []struct {
 }
 
 func TestValid(t *testing.T) {
-
 	var (
 		expr Expr
 		err  error
@@ -311,7 +312,7 @@ func TestReadmeExample(t *testing.T) {
 }
 
 func TestJSON(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		cond    string
 		jsonStr string
 		result  bool
