@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	falseExpr      = &BooleanLiteral{Val: false}
-	defaultEpsilon = float64(1e-6)
+	falseExpr         = &BooleanLiteral{Val: false}
+	defaultEpsilon    = float64(1e-6)
+	ErrMixedTypeArray = fmt.Errorf("Mixed types in condition array")
 )
 
 // SetDefaultEpsilon sets the defaultEpsilon
@@ -60,7 +61,7 @@ func evaluateSubtree(expr Expr, args map[string]interface{}) (Expr, error) {
 		}
 		return applyOperator(n.Op, lv, rv)
 	case *VarRef:
-		//index, err := strconv.Atoi(strings.Replace(n.Val, "$", "", -1))
+		// index, err := strconv.Atoi(strings.Replace(n.Val, "$", "", -1))
 		index := n.Val
 		if err != nil {
 			return falseExpr, fmt.Errorf("Failed to resolve argument index %s: %s", n.Val, err.Error())
@@ -146,20 +147,31 @@ func evaluateSubtree(expr Expr, args map[string]interface{}) (Expr, error) {
 					case string:
 						val := []string{}
 						for _, v := range items {
-							val = append(val, v.(string))
+							stringItem, ok := v.(string)
+							if !ok {
+								return nil, ErrMixedTypeArray
+							}
+							val = append(val, stringItem)
 						}
 						ssl := NewSliceStringLiteral(val)
 						return ssl, nil
 					case float64:
 						snl := &SliceNumberLiteral{}
 						for _, v := range items {
-							snl.Val = append(snl.Val, v.(float64))
+							floatItem, ok := v.(float64)
+							if !ok {
+								return nil, ErrMixedTypeArray
+							}
+							snl.Val = append(snl.Val, floatItem)
 						}
 						return snl, nil
 					case json.Number:
 						snl := &SliceNumberLiteral{}
 						for _, v := range items {
-							f, _ := v.(json.Number).Float64()
+							f, err := v.(json.Number).Float64()
+							if err != nil {
+								return nil, ErrMixedTypeArray
+							}
 							snl.Val = append(snl.Val, f)
 						}
 						return snl, nil
