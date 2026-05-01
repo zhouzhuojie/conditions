@@ -380,30 +380,26 @@ func applyCmp(l, r Expr, cmp func(a, b float64) bool) (*BooleanLiteral, error) {
 
 // --- Equality ---
 
+// applyEQ compares two literals for equality. It uses direct type switches
+// instead of the error-cascade pattern (getString/getNumber/getBoolean) to
+// avoid allocating error objects on the hot path.
 func applyEQ(l, r Expr) (*BooleanLiteral, error) {
-	// Try string comparison
-	if as, err := getString(l); err == nil {
-		bs, err := getString(r)
-		if err != nil {
-			return falseExpr, fmt.Errorf("cannot compare string with non-string")
+	switch lv := l.(type) {
+	case *StringLiteral:
+		if rv, ok := r.(*StringLiteral); ok {
+			return boolExpr(lv.Val == rv.Val), nil
 		}
-		return boolExpr(as == bs), nil
-	}
-	// Try number comparison
-	if an, err := getNumber(l); err == nil {
-		bn, err := getNumber(r)
-		if err != nil {
-			return falseExpr, fmt.Errorf("cannot compare number with non-number")
+		return falseExpr, fmt.Errorf("cannot compare string with non-string")
+	case *NumberLiteral:
+		if rv, ok := r.(*NumberLiteral); ok {
+			return boolExpr(float64Equal(lv.Val, rv.Val)), nil
 		}
-		return boolExpr(float64Equal(an, bn)), nil
-	}
-	// Try boolean comparison
-	if ab, err := getBoolean(l); err == nil {
-		bb, err := getBoolean(r)
-		if err != nil {
-			return falseExpr, fmt.Errorf("cannot compare boolean with non-boolean")
+		return falseExpr, fmt.Errorf("cannot compare number with non-number")
+	case *BooleanLiteral:
+		if rv, ok := r.(*BooleanLiteral); ok {
+			return boolExpr(lv.Val == rv.Val), nil
 		}
-		return boolExpr(ab == bb), nil
+		return falseExpr, fmt.Errorf("cannot compare boolean with non-boolean")
 	}
 	return falseExpr, fmt.Errorf("unsupported equality comparison for types %T and %T", l, r)
 }
@@ -415,19 +411,16 @@ func applyNEQ(l, r Expr) (*BooleanLiteral, error) {
 // --- Regex ---
 
 func applyEREG(l, r Expr) (*BooleanLiteral, error) {
-	a, err := getString(l)
-	if err != nil {
-		return nil, err
+	lv, lok := l.(*StringLiteral)
+	rv, rok := r.(*StringLiteral)
+	if !lok || !rok {
+		return nil, fmt.Errorf("regex match requires string operands, got %T and %T", l, r)
 	}
-	b, err := getString(r)
+	re, err := getCompiledRegexp(rv.Val)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid regex pattern %q: %s", rv.Val, err)
 	}
-	re, err := getCompiledRegexp(b)
-	if err != nil {
-		return nil, fmt.Errorf("invalid regex pattern %q: %s", b, err)
-	}
-	return boolExpr(re.MatchString(a)), nil
+	return boolExpr(re.MatchString(lv.Val)), nil
 }
 
 // --- Membership (IN / CONTAINS) ---
