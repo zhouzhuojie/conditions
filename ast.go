@@ -2,34 +2,8 @@ package conditions
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
-	"strings"
 )
-
-// DataType represents the primitive data types available.
-type DataType string
-
-const (
-	Unknown = DataType("")
-	Number  = DataType("number")
-	Boolean = DataType("boolean")
-	String  = DataType("string")
-)
-
-// InspectDataType returns the data type of a given value.
-func InspectDataType(v interface{}) DataType {
-	switch v.(type) {
-	case float64:
-		return Number
-	case bool:
-		return Boolean
-	case string:
-		return String
-	default:
-		return Unknown
-	}
-}
 
 // Node represents a node in the conditions abstract syntax tree.
 type Node interface {
@@ -83,16 +57,6 @@ type NumberLiteral struct {
 func (l *NumberLiteral) String() string { return strconv.FormatFloat(l.Val, 'f', 3, 64) }
 
 func (n *NumberLiteral) Args() []string { return nil }
-
-func NewSliceStringLiteral(val []string) *SliceStringLiteral {
-	ssl := &SliceStringLiteral{}
-	ssl.Val = val
-	ssl.m = make(map[string]struct{}, len(val))
-	for _, item := range ssl.Val {
-		ssl.m[item] = struct{}{}
-	}
-	return ssl
-}
 
 type SliceStringLiteral struct {
 	Val []string
@@ -172,53 +136,12 @@ func (p *ParenExpr) Args() []string {
 	return p.Expr.Args()
 }
 
-// Visitor can be called by Walk to traverse an AST hierarchy.
-// The Visit() function is called once per node.
-type Visitor interface {
-	Visit(Node) Visitor
-}
-
-// Walk traverses a node hierarchy in depth-first order.
-func Walk(v Visitor, node Node) {
-	if v = v.Visit(node); v == nil {
-		return
+func NewSliceStringLiteral(val []string) *SliceStringLiteral {
+	ssl := &SliceStringLiteral{}
+	ssl.Val = val
+	ssl.m = make(map[string]struct{}, len(val))
+	for _, item := range ssl.Val {
+		ssl.m[item] = struct{}{}
 	}
-
-	switch n := node.(type) {
-	case *BinaryExpr:
-		Walk(v, n.LHS)
-		Walk(v, n.RHS)
-
-	case *ParenExpr:
-		Walk(v, n.Expr)
-	}
-}
-
-// WalkFunc traverses a node hierarchy in depth-first order.
-func WalkFunc(node Node, fn func(Node)) {
-	Walk(walkFuncVisitor(fn), node)
-}
-
-type walkFuncVisitor func(Node)
-
-func (fn walkFuncVisitor) Visit(n Node) Visitor { fn(n); return fn }
-
-// quoteIdentRe is pre-compiled to avoid recompilation on every call.
-var quoteIdentRe = regexp.MustCompile(`[^a-zA-Z_.]`)
-
-// quoteReplacer is pre-allocated to avoid creating a new Replacer on every Quote call.
-var quoteReplacer = strings.NewReplacer("\n", `\n`, `\`, `\\`, `"`, `\"`)
-
-// Quote returns a quoted string.
-func Quote(s string) string {
-	return `"` + quoteReplacer.Replace(s) + `"`
-}
-
-// QuoteIdent returns a quoted identifier if the identifier requires quoting.
-// Otherwise returns the original string passed in.
-func QuoteIdent(s string) string {
-	if s == "" || quoteIdentRe.MatchString(s) {
-		return Quote(s)
-	}
-	return s
+	return ssl
 }
