@@ -163,3 +163,36 @@ func TestApplyEQAllBranches(t *testing.T) {
 		assert.Contains(t, err.Error(), "unsupported equality")
 	})
 }
+
+func TestNEQOperator(t *testing.T) {
+	t.Run("string != string (different)", func(t *testing.T) {
+		expr, _ := Parse(`{foo} != "bar"`)
+		r, err := Evaluate(expr, map[string]interface{}{"foo": "baz"})
+		assert.NoError(t, err)
+		assert.True(t, r)
+	})
+	t.Run("string != string (same)", func(t *testing.T) {
+		expr, _ := Parse(`{foo} != "bar"`)
+		r, err := Evaluate(expr, map[string]interface{}{"foo": "bar"})
+		assert.NoError(t, err)
+		assert.False(t, r)
+	})
+	t.Run("number != number (different)", func(t *testing.T) {
+		expr, _ := Parse(`{foo} != 42`)
+		r, err := Evaluate(expr, map[string]interface{}{"foo": 43})
+		assert.NoError(t, err)
+		assert.True(t, r)
+	})
+	t.Run("number != number (same)", func(t *testing.T) {
+		expr, _ := Parse(`{foo} != 42`)
+		r, err := Evaluate(expr, map[string]interface{}{"foo": 42})
+		assert.NoError(t, err)
+		assert.False(t, r)
+	})
+	t.Run("boolean != boolean (different)", func(t *testing.T) {
+		expr, _ := Parse(`{foo} != true`)
+		r, err := Evaluate(expr, map[string]interface{}{"foo": false})
+		assert.NoError(t, err)
+		assert.True(t, r)
+	})
+}
