@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -855,33 +854,6 @@ func TestConvertInterfaceSliceErrors(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported slice element type")
 	})
-}
-
-func TestFormatDuration(t *testing.T) {
-	tests := []struct {
-		d        time.Duration
-		expected string
-	}{
-		{7 * 24 * time.Hour, "1w"},
-		{14 * 24 * time.Hour, "2w"},
-		{24 * time.Hour, "1d"},
-		{48 * time.Hour, "2d"},
-		{time.Hour, "1h"},
-		{2 * time.Hour, "2h"},
-		{time.Minute, "1m"},
-		{5 * time.Minute, "5m"},
-		{time.Second, "1s"},
-		{30 * time.Second, "30s"},
-		{time.Millisecond, "1ms"},
-		{100 * time.Millisecond, "100ms"},
-		{time.Microsecond, "1"},
-		{500 * time.Microsecond, "500"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			assert.Equal(t, tt.expected, FormatDuration(tt.d))
-		})
-	}
 }
 
 func TestBoolExprSingletons(t *testing.T) {

@@ -5,19 +5,16 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
-// DataType represents the primitive data types available in InfluxQL.
+// DataType represents the primitive data types available.
 type DataType string
 
 const (
-	Unknown  = DataType("")
-	Number   = DataType("number")
-	Boolean  = DataType("boolean")
-	String   = DataType("string")
-	Time     = DataType("time")
-	Duration = DataType("duration")
+	Unknown = DataType("")
+	Number  = DataType("number")
+	Boolean = DataType("boolean")
+	String  = DataType("string")
 )
 
 // InspectDataType returns the data type of a given value.
@@ -29,10 +26,6 @@ func InspectDataType(v interface{}) DataType {
 		return Boolean
 	case string:
 		return String
-	case time.Time:
-		return Time
-	case time.Duration:
-		return Duration
 	default:
 		return Unknown
 	}
@@ -228,23 +221,4 @@ func QuoteIdent(s string) string {
 		return Quote(s)
 	}
 	return s
-}
-
-// FormatDuration formats a duration to a string.
-func FormatDuration(d time.Duration) string {
-	if d%(7*24*time.Hour) == 0 {
-		return fmt.Sprintf("%dw", d/(7*24*time.Hour))
-	} else if d%(24*time.Hour) == 0 {
-		return fmt.Sprintf("%dd", d/(24*time.Hour))
-	} else if d%time.Hour == 0 {
-		return fmt.Sprintf("%dh", d/time.Hour)
-	} else if d%time.Minute == 0 {
-		return fmt.Sprintf("%dm", d/time.Minute)
-	} else if d%time.Second == 0 {
-		return fmt.Sprintf("%ds", d/time.Second)
-	} else if d%time.Millisecond == 0 {
-		return fmt.Sprintf("%dms", d/time.Millisecond)
-	} else {
-		return fmt.Sprintf("%d", d/time.Microsecond)
-	}
 }
