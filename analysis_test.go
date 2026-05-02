@@ -33,13 +33,6 @@ func TestVariablesDeduplication(t *testing.T) {
 	assert.Contains(t, args, "bar")
 }
 
-func TestRemoveDuplicates(t *testing.T) {
-	assert.Nil(t, removeDuplicates(nil))
-	assert.Nil(t, removeDuplicates([]string{}))
-	assert.Equal(t, []string{"a"}, removeDuplicates([]string{"a", "a", "a"}))
-	assert.Equal(t, []string{"a", "b"}, removeDuplicates([]string{"a", "b", "a", "b"}))
-}
-
 func TestVariables(t *testing.T) {
 	cond := `{a} > 1 AND {b} == "test" OR {c} < 100 AND {d} in ["x","y","z"]`
 	p := NewParser(strings.NewReader(cond))

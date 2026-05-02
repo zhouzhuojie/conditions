@@ -145,3 +145,7 @@ func NewSliceStringLiteral(val []string) *SliceStringLiteral {
 	}
 	return ssl
 }
+
+func NewSliceNumberLiteral(val []float64) *SliceNumberLiteral {
+	return &SliceNumberLiteral{Val: val}
+}

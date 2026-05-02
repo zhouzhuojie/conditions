@@ -62,15 +62,15 @@ func resolveVar(name string, args map[string]interface{}) (Expr, error) {
 	case []string:
 		return NewSliceStringLiteral(v), nil
 	case []float64:
-		return &SliceNumberLiteral{Val: v}, nil
+		return NewSliceNumberLiteral(v), nil
 	case []int:
-		return &SliceNumberLiteral{Val: toFloat64Slice(v)}, nil
+		return NewSliceNumberLiteral(toFloat64Slice(v)), nil
 	case []int32:
-		return &SliceNumberLiteral{Val: toFloat64Slice(v)}, nil
+		return NewSliceNumberLiteral(toFloat64Slice(v)), nil
 	case []int64:
-		return &SliceNumberLiteral{Val: toFloat64Slice(v)}, nil
+		return NewSliceNumberLiteral(toFloat64Slice(v)), nil
 	case []float32:
-		return &SliceNumberLiteral{Val: toFloat64Slice(v)}, nil
+		return NewSliceNumberLiteral(toFloat64Slice(v)), nil
 	case []json.Number:
 		return convertJSONNumberSlice(v)
 
@@ -103,7 +103,7 @@ func convertJSONNumberSlice(nums []json.Number) (Expr, error) {
 		}
 		out = append(out, f)
 	}
-	return &SliceNumberLiteral{Val: out}, nil
+	return NewSliceNumberLiteral(out), nil
 }
 
 // convertInterfaceSlice handles []interface{} from JSON unmarshaling.
@@ -154,7 +154,7 @@ func convertTypedSlice[T any](items []interface{}, cast func(interface{}) (T, bo
 	case string:
 		return NewSliceStringLiteral(any(out).([]string)), nil
 	case float64:
-		return &SliceNumberLiteral{Val: any(out).([]float64)}, nil
+		return NewSliceNumberLiteral(any(out).([]float64)), nil
 	}
 	return falseExpr, fmt.Errorf("unsupported slice element type: %T", zero)
 }

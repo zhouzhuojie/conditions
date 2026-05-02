@@ -316,7 +316,7 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 				}
 				values = append(values, f)
 			}
-			return &SliceNumberLiteral{Val: values}, nil
+			return NewSliceNumberLiteral(values), nil
 		default:
 			return nil, fmt.Errorf("slice of unknown type %T", t)
 		}
