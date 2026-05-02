@@ -289,25 +289,30 @@ conditions.InspectDataType(struct{}{})    // ""
 
 ## Performance
 
-Benchmarked on Apple M1 Max:
+Benchmarked on Apple M1 Max (`go test -bench=. -benchmem`):
 
-| Operation | Time | Allocs |
-|-----------|------|--------|
-| Simple comparison (`{foo} == "hello"`) | 35 ns/op | 1 |
-| Numeric comparison (`{foo} > 100 AND < 200`) | 61 ns/op | 2 |
-| Boolean operators (`{a} AND {b} OR {c}`) | 58 ns/op | 3 |
-| Regex match (`{status} =~ /^5\d\d/`) | 82 ns/op | 1 |
-| 10K string array IN (hit) | 42 ns/op | 1 |
-| 10K string array IN (miss) | 42 ns/op | 1 |
-| Short-circuit (`false AND ...`) | 6 ns/op | 0 |
-| Full expression parse | 1.2 μs/op | 28 |
+| Operation | Time | Memory | Allocs |
+|-----------|------|---------|--------|
+| Simple comparison (`{foo} == "hello"`) | 33 ns/op | 16 B/op | 1 |
+| Numeric comparison (`{foo} > 100 AND < 200`) | 60 ns/op | 16 B/op | 2 |
+| Boolean operators (`{a} AND {b} OR {c}`) | 57 ns/op | 3 B/op | 3 |
+| Regex match (`{status} =~ /^5\d\d/`) | 80 ns/op | 16 B/op | 1 |
+| String IN 5-item array | 40 ns/op | 16 B/op | 1 |
+| Number IN 10-element array | 38 ns/op | 8 B/op | 1 |
+| String IN 10K array (hit) | 41 ns/op | 16 B/op | 1 |
+| String IN 10K array (miss) | 40 ns/op | 16 B/op | 1 |
+| `CONTAINS` check | 155 ns/op | 288 B/op | 3 |
+| `Variables()` extraction | 143 ns/op | 64 B/op | 1 |
+| Short-circuit (`false AND ...`) | 6 ns/op | 0 B/op | 0 |
+| Full expression parse | 1.1 μs/op | 1896 B/op | 28 |
 
-Key optimizations:
-- **Regex caching** — patterns compiled once, reused across evaluations
-- **String array hash map** — `IN`/`CONTAINS` on string arrays is O(1)
+**Key optimizations:**
+- **String array hash map** — `IN`/`CONTAINS` on string arrays is O(1) regardless of array size (10K elements = same ~40ns)
+- **Regex caching** — patterns compiled once and reused across evaluations
 - **Short-circuit evaluation** — `AND`/`OR` skip the right side when the result is determined
-- **Boolean singletons** — no allocations for boolean results
-- **Zero-copy literals** — number/string/boolean args resolved without copying
+- **Boolean singletons** — no allocations for boolean results in the hot path
+- **Optimized `Variables()`** — direct AST walk with map, avoiding intermediate slices (44% faster, 75% less memory)
+- **Zero-copy number parsing** — `resolveVar()` uses type switches instead of `reflect`
 
 ## Credit
 
