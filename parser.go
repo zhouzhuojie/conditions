@@ -90,7 +90,7 @@ func (p *Parser) scanWithMapping() (Token, string) {
 		tok = NUMBER
 	case '{':
 		var err error
-		t, tt, err = p.scanArg()
+		_, tt, err = p.scanArg()
 		if err != nil {
 			tok = ILLEGAL
 		} else {
@@ -98,7 +98,7 @@ func (p *Parser) scanWithMapping() (Token, string) {
 		}
 	case '[':
 		var err error
-		t, tt, err = p.scanArray()
+		_, tt, err = p.scanArray()
 		if err == nil {
 			tok = ARRAY
 		} else {
@@ -107,17 +107,18 @@ func (p *Parser) scanWithMapping() (Token, string) {
 	case '!':
 		t, tt = p.scan()
 
-		if t == '=' {
+		switch t {
+		case '=':
 			tok = NEQ
 			tt = "!="
-		} else if t == '~' {
+		case '~':
 			tok = NEREG
 			tt = "!~"
-		} else {
+		default:
 			tok = ILLEGAL
 		}
 	case '>':
-		t, tt = p.scan()
+		t, _ = p.scan()
 
 		if t == '=' {
 			tok = GTE
@@ -128,7 +129,7 @@ func (p *Parser) scanWithMapping() (Token, string) {
 			p.unscan()
 		}
 	case '<':
-		t, tt = p.scan()
+		t, _ = p.scan()
 
 		if t == '=' {
 			tok = LTE
@@ -141,13 +142,14 @@ func (p *Parser) scanWithMapping() (Token, string) {
 	case '=':
 		t, tt = p.scan()
 
-		if t == '=' {
+		switch t {
+		case '=':
 			tok = EQ
 			tt = "=="
-		} else if t == '~' {
+		case '~':
 			tok = EREG
 			tt = "=~"
-		} else {
+		default:
 			tok = ILLEGAL
 		}
 
@@ -172,35 +174,37 @@ func (p *Parser) scanWithMapping() (Token, string) {
 	case scanner.Ident:
 		ttU := strings.ToUpper(tt)
 
-		if ttU == "AND" {
+		switch ttU {
+		case "AND":
 			tok = AND
-		} else if ttU == "OR" {
+		case "OR":
 			tok = OR
-		} else if ttU == "XOR" {
+		case "XOR":
 			tok = XOR
-		} else if ttU == "NAND" {
+		case "NAND":
 			tok = NAND
-		} else if ttU == "IN" {
+		case "IN":
 			tok = IN
-		} else if ttU == "NOT" {
+		case "NOT":
 			_, tmp := p.scan()
-			if strings.ToUpper(tmp) == "IN" {
+			switch strings.ToUpper(tmp) {
+			case "IN":
 				tok = NOTIN
 				tt = "NOT IN"
-			} else if strings.ToUpper(tmp) == "CONTAINS" {
+			case "CONTAINS":
 				tok = NOTCONTAINS
 				tt = "NOT CONTAINS"
-			} else {
+			default:
 				p.unscan()
 				tok = ILLEGAL
 			}
-		} else if ttU == "TRUE" {
+		case "TRUE":
 			tok = TRUE
-		} else if ttU == "FALSE" {
+		case "FALSE":
 			tok = FALSE
-		} else if ttU == "CONTAINS" {
+		case "CONTAINS":
 			tok = CONTAINS
-		} else {
+		default:
 			tok = ILLEGAL
 		}
 	}

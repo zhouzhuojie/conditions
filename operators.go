@@ -21,7 +21,7 @@ func applyOperator(op Token, l, r Expr) (*BooleanLiteral, error) {
 	case XOR:
 		return applyBoolOp(l, r, func(a, b bool) bool { return a != b })
 	case NAND:
-		return applyBoolOp(l, r, func(a, b bool) bool { return !(a && b) })
+		return applyBoolOp(l, r, func(a, b bool) bool { return !a || !b })
 	case IN:
 		return applyIN(l, r)
 	case NOTIN:

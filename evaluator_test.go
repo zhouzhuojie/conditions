@@ -234,8 +234,10 @@ func TestJSON(t *testing.T) {
 		t.Run(test.cond+"_"+test.jsonStr, func(t *testing.T) {
 			p := NewParser(strings.NewReader(test.cond))
 			expr, _ := p.Parse()
-			data := make(map[string]interface{})
-			json.Unmarshal([]byte(test.jsonStr), &data)
+		data := make(map[string]interface{})
+		if err := json.Unmarshal([]byte(test.jsonStr), &data); err != nil {
+			t.Fatalf("failed to unmarshal json: %v", err)
+		}
 			r, err := Evaluate(expr, data)
 			assert.Equal(t, test.result, r, "%s with %s", test.cond, test.jsonStr)
 			if test.isErr {
