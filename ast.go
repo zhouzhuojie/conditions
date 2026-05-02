@@ -11,14 +11,14 @@ type Node interface {
 	String() string
 }
 
-func (_ *VarRef) node()             {}
-func (_ *NumberLiteral) node()      {}
-func (_ *StringLiteral) node()      {}
-func (_ *BooleanLiteral) node()     {}
-func (_ *BinaryExpr) node()         {}
-func (_ *ParenExpr) node()          {}
-func (_ *SliceStringLiteral) node() {}
-func (_ *SliceNumberLiteral) node() {}
+func (*VarRef) node()             {}
+func (*NumberLiteral) node()      {}
+func (*StringLiteral) node()      {}
+func (*BooleanLiteral) node()     {}
+func (*BinaryExpr) node()         {}
+func (*ParenExpr) node()          {}
+func (*SliceStringLiteral) node() {}
+func (*SliceNumberLiteral) node() {}
 
 // Expr represents an expression that can be evaluated to a value.
 type Expr interface {
@@ -27,14 +27,14 @@ type Expr interface {
 	Args() []string
 }
 
-func (_ *VarRef) expr()             {}
-func (_ *NumberLiteral) expr()      {}
-func (_ *StringLiteral) expr()      {}
-func (_ *BooleanLiteral) expr()     {}
-func (_ *BinaryExpr) expr()         {}
-func (_ *ParenExpr) expr()          {}
-func (_ *SliceStringLiteral) expr() {}
-func (_ *SliceNumberLiteral) expr() {}
+func (*VarRef) expr()             {}
+func (*NumberLiteral) expr()      {}
+func (*StringLiteral) expr()      {}
+func (*BooleanLiteral) expr()     {}
+func (*BinaryExpr) expr()         {}
+func (*ParenExpr) expr()          {}
+func (*SliceStringLiteral) expr() {}
+func (*SliceNumberLiteral) expr() {}
 
 // VarRef represents a reference to a variable.
 type VarRef struct {

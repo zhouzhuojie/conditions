@@ -10,11 +10,16 @@ func BenchmarkParser(b *testing.B) {
 	cond := "({foo}{dfs}{a} == true AND {bar} == true) AND false"
 	args := map[string]interface{}{"foo.dfs.a": true, "bar": true, "something": 1.0}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -22,11 +27,16 @@ func BenchmarkParserWithShortCircuit(b *testing.B) {
 	cond := "false AND {foo} > 100"
 	args := map[string]interface{}{"foo": 42}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -40,11 +50,16 @@ func BenchmarkLongSliceString(b *testing.B) {
 	args := map[string]interface{}{"foo": "123"}
 
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -58,11 +73,16 @@ func BenchmarkLongSliceStringMiss(b *testing.B) {
 	args := map[string]interface{}{"foo": "notfound"}
 
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -71,7 +91,7 @@ func BenchmarkParseOnly(b *testing.B) {
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		NewParser(strings.NewReader(cond)).Parse()
+		_, _ = NewParser(strings.NewReader(cond)).Parse()
 	}
 }
 
@@ -79,11 +99,16 @@ func BenchmarkRegexMatch(b *testing.B) {
 	cond := `{status} =~ /^5\d\d/`
 	args := map[string]interface{}{"status": "500"}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -91,11 +116,16 @@ func BenchmarkSimpleComparison(b *testing.B) {
 	cond := `{foo} == "hello"`
 	args := map[string]interface{}{"foo": "hello"}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -103,11 +133,16 @@ func BenchmarkNumericComparison(b *testing.B) {
 	cond := `{foo} > 100 AND {foo} < 200`
 	args := map[string]interface{}{"foo": 150}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -115,11 +150,16 @@ func BenchmarkBooleanOperators(b *testing.B) {
 	cond := `{a} AND {b} OR {c}`
 	args := map[string]interface{}{"a": true, "b": false, "c": true}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -127,11 +167,16 @@ func BenchmarkShortSliceIN(b *testing.B) {
 	cond := `{foo} in ["alpha", "beta", "gamma", "delta", "epsilon"]`
 	args := map[string]interface{}{"foo": "gamma"}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -139,11 +184,16 @@ func BenchmarkNumberSliceIN(b *testing.B) {
 	cond := `{foo} in [1,2,3,4,5,6,7,8,9,10]`
 	args := map[string]interface{}{"foo": 7}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -151,18 +201,26 @@ func BenchmarkContains(b *testing.B) {
 	cond := `{foo} contains "target"`
 	args := map[string]interface{}{"foo": []string{"a", "b", "target", "c", "d"}}
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
 func BenchmarkVariables(b *testing.B) {
 	cond := `{a} > 1 AND {b} == "test" OR {c} < 100 AND {d} in ["x","y","z"]`
 	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {

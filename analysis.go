@@ -32,19 +32,3 @@ func collectVars(n Node, seen map[string]struct{}) {
 	}
 	// All other node types have no variable references
 }
-
-// removeDuplicates is used by tests to verify deduplication logic.
-func removeDuplicates(a []string) []string {
-	if len(a) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(a))
-	result := make([]string, 0, len(a))
-	for _, val := range a {
-		if _, ok := seen[val]; !ok {
-			result = append(result, val)
-			seen[val] = struct{}{}
-		}
-	}
-	return result
-}

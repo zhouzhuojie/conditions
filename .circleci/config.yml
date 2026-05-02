@@ -1,0 +1,11 @@
+version: 2.1
+jobs:
+  noop:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run: echo "CircleCI disabled. Using GitHub Actions instead."
+workflows:
+  no-op:
+    jobs:
+      - noop
