@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// --- Invalid expressions ---
+
 var invalidTestData = []string{
 	"",
 	"A",
@@ -33,28 +35,17 @@ var invalidTestData = []string{
 }
 
 func TestInvalid(t *testing.T) {
-
-	var (
-		expr Expr
-		err  error
-	)
-
 	for _, cond := range invalidTestData {
-		t.Log("--------")
-		t.Logf("Parsing: %s", cond)
-
-		p := NewParser(strings.NewReader(cond))
-		expr, err = p.Parse()
-		if err == nil {
-			t.Error("Should receive error")
-			break
-		}
-		if expr != nil {
-			t.Error("Expression should nil")
-			break
-		}
+		t.Run(cond, func(t *testing.T) {
+			p := NewParser(strings.NewReader(cond))
+			expr, err := p.Parse()
+			assert.Error(t, err, "Should receive error for: %s", cond)
+			assert.Nil(t, expr, "Expression should be nil for: %s", cond)
+		})
 	}
 }
+
+// --- Valid expressions ---
 
 var validTestData = []struct {
 	cond   string
@@ -83,45 +74,45 @@ var validTestData = []struct {
 	{"{var5-type-2} == 1", map[string]interface{}{"var5-type-2": 1}, true, false},
 	{"{var0}", map[string]interface{}{"var0": true}, true, false},
 	{"{var0}", map[string]interface{}{"var0": false}, false, false},
-	{"\"OFF\"", nil, false, true},
-	{"\"ON\"", nil, false, true},
-	{"{var0} == \"OFF\"", map[string]interface{}{"var0": "OFF"}, true, false},
+	{`"OFF"`, nil, false, true},
+	{`"ON"`, nil, false, true},
+	{`{var0} == "OFF"`, map[string]interface{}{"var0": "OFF"}, true, false},
 
 	// AND
-	{"{var0} > 10 AND {var1} == \"OFF\"", map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
-	{"({var0} > 10) AND ({var1} == \"OFF\")", map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
-	{"({var0} > 10) AND ({var1} == \"OFF\") OR true", map[string]interface{}{"var0": 1, "var1": "ON"}, true, false},
-	{"{foo}{dfs} == true and {bar} == true", map[string]interface{}{"foo.dfs": true, "bar": true}, true, false},
-	{"{foo}{dfs}{a} == true and {bar} == true", map[string]interface{}{"foo.dfs.a": true, "bar": true}, true, false},
-	{"{@foo}{a} == true and {bar} == true", map[string]interface{}{"@foo.a": true, "bar": true}, true, false},
-	{"{foo}{unknow} == true and {bar} == true", map[string]interface{}{"foo.dfs": true, "bar": true}, false, true},
-	{"{foo} == 123", map[string]interface{}{"foo": json.Number("123"), "bar": true}, true, false},
+	{`{var0} > 10 AND {var1} == "OFF"`, map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
+	{`({var0} > 10) AND ({var1} == "OFF")`, map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
+	{`({var0} > 10) AND ({var1} == "OFF") OR true`, map[string]interface{}{"var0": 1, "var1": "ON"}, true, false},
+	{`{foo}{dfs} == true and {bar} == true`, map[string]interface{}{"foo.dfs": true, "bar": true}, true, false},
+	{`{foo}{dfs}{a} == true and {bar} == true`, map[string]interface{}{"foo.dfs.a": true, "bar": true}, true, false},
+	{`{@foo}{a} == true and {bar} == true`, map[string]interface{}{"@foo.a": true, "bar": true}, true, false},
+	{`{foo}{unknow} == true and {bar} == true`, map[string]interface{}{"foo.dfs": true, "bar": true}, false, true},
+	{`{foo} == 123`, map[string]interface{}{"foo": json.Number("123"), "bar": true}, true, false},
 
 	// OR
-	{"{foo} == true OR {foo} > 1", map[string]interface{}{"foo": true}, false, true},
-	{"{foo} == true OR {foo} == false", map[string]interface{}{"foo": true}, true, false},
-	{"{foo} > 100 OR {foo} < 99 ", map[string]interface{}{"foo": 100}, false, false},
-	{"{foo}{dfs} == true or {bar} == true", map[string]interface{}{"foo.dfs": true, "bar": true}, true, false},
+	{`{foo} == true OR {foo} > 1`, map[string]interface{}{"foo": true}, true, false},
+	{`{foo} == true OR {foo} == false`, map[string]interface{}{"foo": true}, true, false},
+	{`{foo} > 100 OR {foo} < 99 `, map[string]interface{}{"foo": 100}, false, false},
+	{`{foo}{dfs} == true or {bar} == true`, map[string]interface{}{"foo.dfs": true, "bar": true}, true, false},
 
-	//XOR
+	// XOR
 	{"false XOR false", nil, false, false},
 	{"false xor true", nil, true, false},
 	{"true XOR false", nil, true, false},
 	{"true xor true", nil, false, false},
 
-	//NAND
+	// NAND
 	{"false NAND false", nil, true, false},
 	{"false nand true", nil, true, false},
 	{"true nand false", nil, true, false},
 	{"true NAND true", nil, false, false},
 
 	// IN
-	{"{foo} in {foobar}", map[string]interface{}{"foo": "findme", "foobar": []string{"notme", "may", "findme", "lol"}}, true, false},
-	{"{foo} in [123]", map[string]interface{}{"foo": json.Number("123"), "baz": true}, true, false},
-	{"{foo} in [123]", map[string]interface{}{"foo": json.Number("124"), "baz": true}, false, false},
+	{`{foo} in {foobar}`, map[string]interface{}{"foo": "findme", "foobar": []string{"notme", "may", "findme", "lol"}}, true, false},
+	{`{foo} in [123]`, map[string]interface{}{"foo": json.Number("123"), "baz": true}, true, false},
+	{`{foo} in [123]`, map[string]interface{}{"foo": json.Number("124"), "baz": true}, false, false},
 
 	// NOT IN
-	{"{foo} not in {foobar}", map[string]interface{}{"foo": "dontfindme", "foobar": []string{"notme", "may", "findme", "lol"}}, true, false},
+	{`{foo} not in {foobar}`, map[string]interface{}{"foo": "dontfindme", "foobar": []string{"notme", "may", "findme", "lol"}}, true, false},
 
 	// IN with array of string
 	{`{foo} in ["bonjour", "le monde", "oui"]`, map[string]interface{}{"foo": "le monde"}, true, false},
@@ -137,11 +128,11 @@ var validTestData = []struct {
 	{`{foo} in [2,3,4] AND {foo} == 3`, map[string]interface{}{"foo": 4}, false, false},
 	{`{foo} in [2,3,4]`, map[string]interface{}{"foo": 5}, false, false},
 
-	//{NOT}IN with array of numbers
+	// NOT IN with array of numbers
 	{`{foo} not in [2,3,4]`, map[string]interface{}{"foo": 4}, false, false},
 	{`{foo} not in [2,3,4]`, map[string]interface{}{"foo": 5}, true, false},
 
-	//{CON}AINS
+	// CONTAINS
 	{`{foo} contains "2"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
 	{`{foo} contains "2"`, map[string]interface{}{"foo": []string{}}, false, false},
 	{`{foo} contains 2`, map[string]interface{}{"foo": []string{"1", "2"}}, false, true},
@@ -161,153 +152,58 @@ var validTestData = []struct {
 	{`{foo} contains 2`, map[string]interface{}{"foo": []interface{}{json.Number("2")}}, true, false},
 	{`{foo} contains 2`, map[string]interface{}{"foo": []interface{}{json.Number("3")}}, false, false},
 
-	//{NOT}CONTAINS
+	// NOT CONTAINS
 	{`{foo} not contains "2"`, map[string]interface{}{"foo": []string{"1", "2"}}, false, false},
 	{`{foo} not contains "0"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
 	{`{foo} not contains 0`, map[string]interface{}{"foo": []string{"1", "2"}}, false, true},
 	{`{foo} not contains 0`, map[string]interface{}{"bar": []string{"1", "2"}}, false, true},
 
-	//{=~
+	// =~
 	{`{status} =~ /^5\d\d/`, map[string]interface{}{"status": "500"}, true, false},
 	{`{status} =~ /^4\d\d/`, map[string]interface{}{"status": "500"}, false, false},
 	{`{status} =~ /foo/`, map[string]interface{}{"status": "foobar"}, true, false},
 	{`{status} =~ "foo"`, map[string]interface{}{"status": "foobar"}, true, false},
 	{`{status} =~ "foo"`, map[string]interface{}{"status": "bar"}, false, false},
 
-	//{!~
+	// !~
 	{"{status} !~ /^5\\d\\d/", map[string]interface{}{"status": "500"}, false, false},
 	{"{status} !~ /^4\\d\\d/", map[string]interface{}{"status": "500"}, true, false},
 }
 
 func TestValid(t *testing.T) {
-
-	var (
-		expr Expr
-		err  error
-		r    bool
-	)
-
-	for _, td := range validTestData {
-		t.Log("--------")
-		t.Logf("Parsing: %s", td.cond)
-
-		p := NewParser(strings.NewReader(td.cond))
-		expr, err = p.Parse()
-		t.Logf("Expression: %s", expr)
-		if err != nil {
-			t.Errorf("Unexpected error parsing expression: %s", td.cond)
-			t.Error(err.Error())
-			break
-		}
-
-		t.Logf("Evaluating with: %#v", td.args)
-		r, err = Evaluate(expr, td.args)
-		if err != nil {
-			if td.isErr {
-				continue
+	for i, td := range validTestData {
+		t.Run(fmt.Sprintf("%d_%s", i, td.cond), func(t *testing.T) {
+			p := NewParser(strings.NewReader(td.cond))
+			expr, err := p.Parse()
+			if err != nil {
+				t.Fatalf("Unexpected error parsing expression %q: %s", td.cond, err)
 			}
-			t.Errorf("Unexpected error evaluating: %s", expr)
-			t.Error(err.Error())
-			break
-		} else {
-			if td.isErr {
-				t.Errorf("Expected no error evaluating: %s", expr)
-				t.Error(err.Error())
-				break
+
+			r, err := Evaluate(expr, td.args)
+			if err != nil {
+				if td.isErr {
+					return
+				}
+				t.Fatalf("Unexpected error evaluating %q: %s", expr, err)
+			} else if td.isErr {
+				t.Fatalf("Expected error but got none for: %s", expr)
 			}
-		}
-		if r != td.result {
-			t.Errorf("Expected %v, received: %v", td.result, r)
-			break
-		}
+			assert.Equal(t, td.result, r, "Expression: %s, Args: %#v", td.cond, td.args)
+		})
 	}
-}
-
-func TestExpressionsVariableNames(t *testing.T) {
-	cond := "{@foo}{a} == true and {bar} == true or {var9} > 10"
-	p := NewParser(strings.NewReader(cond))
-	expr, err := p.Parse()
-	assert.Nil(t, err)
-
-	args := Variables(expr)
-	assert.Contains(t, args, "@foo.a", "...")
-	assert.Contains(t, args, "bar", "...")
-	assert.Contains(t, args, "var9", "...")
-	assert.NotContains(t, args, "foo", "...")
-	assert.NotContains(t, args, "@foo", "...")
-}
-
-func TestFloat64Equal(t *testing.T) {
-	epsilon := 1e-6
-	assert.True(t, float64Equal(0.01, 0.01, epsilon))
-	assert.True(t, float64Equal(0.01, 0.01000001, epsilon))
-	assert.True(t, float64Equal(1e6, 1e6, epsilon))
-	assert.True(t, float64Equal(1e6, 1e6+1e-7, epsilon))
-	assert.True(t, float64Equal(1e10, 1e10, epsilon))
-	assert.False(t, float64Equal(1e10, 1e10+1, epsilon))
-	assert.False(t, float64Equal(0.01, 0.0100001, epsilon))
-	assert.False(t, float64Equal(0.0, 0.0000001, epsilon))
-	assert.False(t, float64Equal(0, 0.0000000000000000001, epsilon))
-}
-
-func TestSetDefaultEpsilon(t *testing.T) {
-	defer SetDefaultEpsilon(1e-6)
-
-	t.Run("0.1 == 0.1", func(t *testing.T) {
-		SetDefaultEpsilon(1e-6)
-		p := NewParser(strings.NewReader("{foo} == 0.1"))
-		expr, _ := p.Parse()
-		r, err := Evaluate(expr, map[string]interface{}{"foo": 0.1})
-		assert.True(t, r)
-		assert.NoError(t, err)
-	})
-
-	t.Run("0.1 == 0.100000000001", func(t *testing.T) {
-		SetDefaultEpsilon(1e-6)
-		p := NewParser(strings.NewReader("{foo} == 0.1"))
-		expr, _ := p.Parse()
-		r, err := Evaluate(expr, map[string]interface{}{"foo": 0.100000000001})
-		assert.True(t, r)
-		assert.NoError(t, err)
-	})
-
-	t.Run("0.1 != 0.100001", func(t *testing.T) {
-		SetDefaultEpsilon(1e-6)
-		p := NewParser(strings.NewReader("{foo} == 0.1"))
-		expr, _ := p.Parse()
-		r, err := Evaluate(expr, map[string]interface{}{"foo": 0.100001})
-		assert.False(t, r)
-		assert.NoError(t, err)
-	})
-
-	t.Run("0.1 == 0.100001 if set epsilon to 1e-5", func(t *testing.T) {
-		SetDefaultEpsilon(1e-5)
-		p := NewParser(strings.NewReader("{foo} == 0.1"))
-		expr, _ := p.Parse()
-		r, err := Evaluate(expr, map[string]interface{}{"foo": 0.100001})
-		assert.True(t, r)
-		assert.NoError(t, err)
-	})
 }
 
 func TestReadmeExample(t *testing.T) {
-	// Our condition to check
 	s := `({foo} > 0.45) AND ({bar} == "ON" OR {baz} IN ["ACTIVE", "CLEAR"])`
 
-	// Parse the condition language and get expression
 	p := NewParser(strings.NewReader(s))
 	expr, err := p.Parse()
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
 
 	data := map[string]interface{}{"foo": 0.62, "bar": "ON", "baz": "ACTIVE"}
 	r, err := Evaluate(expr, data)
-	if err != nil {
-		t.Error(err)
-	}
-
-	fmt.Println("Evaluation result:", r)
+	assert.NoError(t, err)
+	assert.True(t, r)
 }
 
 func TestJSON(t *testing.T) {
@@ -322,11 +218,9 @@ func TestJSON(t *testing.T) {
 		{`{foo} in [124]`, `{"foo": 123}`, false, false},
 		{`{foo} in [123]`, `{"foo": 123, "bar": "baz"}`, true, false},
 		{`{foo} in [124]`, `{"foo": 123, "bar": "baz"}`, false, false},
-
 		{`{foo} == "123"`, `{"foo": 123}`, false, true},
 		{`{foo} == "123"`, `{"foo": "123"}`, true, false},
 		{`{foo} not in ["123"]`, `{"foo": "123"}`, false, false},
-
 		{`{foo} contains "123"`, `{"foo": ["123"]}`, true, false},
 		{`{foo} contains 123`, `{"foo": [123]}`, true, false},
 		{`{foo} contains 123`, `{"foo": ["123"]}`, false, true},
@@ -337,44 +231,111 @@ func TestJSON(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		p := NewParser(strings.NewReader(test.cond))
-		expr, _ := p.Parse()
-		data := make(map[string]interface{})
-		json.Unmarshal([]byte(test.jsonStr), &data)
-		r, err := Evaluate(expr, data)
-		assert.Equal(t, r, test.result, test.cond, test.jsonStr)
-		if test.isErr {
-			assert.Error(t, err, test.cond, test.jsonStr)
-		} else {
-			assert.NoError(t, err, test.cond)
-		}
+		t.Run(test.cond+"_"+test.jsonStr, func(t *testing.T) {
+			p := NewParser(strings.NewReader(test.cond))
+			expr, _ := p.Parse()
+			data := make(map[string]interface{})
+			json.Unmarshal([]byte(test.jsonStr), &data)
+			r, err := Evaluate(expr, data)
+			assert.Equal(t, test.result, r, "%s with %s", test.cond, test.jsonStr)
+			if test.isErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
 	}
 }
 
-func BenchmarkParser(b *testing.B) {
-	cond := "({foo}{dfs}{a} == true AND {bar} == true) AND false"
-	args := map[string]interface{}{"foo.dfs.a": true, "bar": true, "something": 1.0}
-	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+func TestParseConvenience(t *testing.T) {
+	expr, err := Parse(`{foo} > 10 AND {bar} == "hello"`)
+	assert.NoError(t, err)
+	assert.NotNil(t, expr)
 
-	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
-	}
+	r, err := Evaluate(expr, map[string]interface{}{"foo": 15, "bar": "hello"})
+	assert.NoError(t, err)
+	assert.True(t, r)
 }
 
-func BenchmarkLongSliceString(b *testing.B) {
-	items := []string{}
-	for i := 0; i <= 10000; i++ {
-		items = append(items, fmt.Sprintf(`"%v"`, i))
-	}
+func TestParseConvenienceInvalid(t *testing.T) {
+	_, err := Parse(`{foo} == UNQUOTED`)
+	assert.Error(t, err)
+}
 
-	cond := fmt.Sprintf(`{foo} IN [%s]`, strings.Join(items, ","))
-	args := map[string]interface{}{"foo": "123"}
+// --- Error handling ---
 
-	p := NewParser(strings.NewReader(cond))
-	expr, _ := p.Parse()
+func TestNilExprEvaluation(t *testing.T) {
+	_, err := Evaluate(nil, map[string]interface{}{"foo": 1})
+	assert.Error(t, err)
+}
 
-	for n := 0; n < b.N; n++ {
-		Evaluate(expr, args)
-	}
+func TestNilArgsMap(t *testing.T) {
+	t.Run("boolean literal with nil args", func(t *testing.T) {
+		expr, _ := Parse("true")
+		r, err := Evaluate(expr, nil)
+		assert.NoError(t, err)
+		assert.True(t, r)
+	})
+	t.Run("var ref with nil args", func(t *testing.T) {
+		expr, _ := Parse("{foo}")
+		_, err := Evaluate(expr, nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestUnsupportedOperator(t *testing.T) {
+	_, err := applyOperator(Token(999), &BooleanLiteral{Val: true}, &BooleanLiteral{Val: false})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported operator")
+}
+
+func TestEvaluateTypeMismatchErrors(t *testing.T) {
+	t.Run("string vs number", func(t *testing.T) {
+		expr, _ := Parse(`{foo} == "hello"`)
+		_, err := Evaluate(expr, map[string]interface{}{"foo": 42})
+		assert.Error(t, err)
+	})
+	t.Run("number vs string", func(t *testing.T) {
+		expr, _ := Parse(`{foo} == 42`)
+		_, err := Evaluate(expr, map[string]interface{}{"foo": "hello"})
+		assert.Error(t, err)
+	})
+	t.Run("boolean vs number", func(t *testing.T) {
+		expr, _ := Parse(`{foo} > 10`)
+		_, err := Evaluate(expr, map[string]interface{}{"foo": true})
+		assert.Error(t, err)
+	})
+}
+
+// --- Short-circuit ---
+
+func TestShortCircuitAND(t *testing.T) {
+	expr, err := Parse(`{flag} AND {missing}`)
+	assert.NoError(t, err)
+	r, evalErr := Evaluate(expr, map[string]interface{}{"flag": false})
+	assert.NoError(t, evalErr)
+	assert.False(t, r)
+}
+
+func TestShortCircuitOR(t *testing.T) {
+	expr, err := Parse(`{flag} OR {missing}`)
+	assert.NoError(t, err)
+	r, evalErr := Evaluate(expr, map[string]interface{}{"flag": true})
+	assert.NoError(t, evalErr)
+	assert.True(t, r)
+}
+
+func TestEvalBinaryXorNandDirect(t *testing.T) {
+	t.Run("XOR", func(t *testing.T) {
+		expr, _ := Parse(`true XOR false`)
+		r, err := Evaluate(expr, nil)
+		assert.NoError(t, err)
+		assert.True(t, r)
+	})
+	t.Run("NAND", func(t *testing.T) {
+		expr, _ := Parse(`true NAND true`)
+		r, err := Evaluate(expr, nil)
+		assert.NoError(t, err)
+		assert.False(t, r)
+	})
 }

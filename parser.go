@@ -32,6 +32,12 @@ func NewParser(r io.Reader) *Parser {
 	return p
 }
 
+// Parse is a convenience function that parses a condition string into an AST expression.
+func Parse(condition string) (Expr, error) {
+	p := NewParser(strings.NewReader(condition))
+	return p.Parse()
+}
+
 // Parse starts scanning & parsing process (main entry point).
 // It returns an expression (AST) which you can use for the final evaluation
 // of the conditions/statements
@@ -82,16 +88,6 @@ func (p *Parser) scanWithMapping() (Token, string) {
 		}
 	case scanner.Float, scanner.Int:
 		tok = NUMBER
-	case '$':
-		t, tt = p.scan()
-
-		if t == scanner.Float || t == scanner.Int {
-			tok = IDENT
-			tt = "$" + tt
-
-		} else {
-			tok = ILLEGAL
-		}
 	case '{':
 		var err error
 		t, tt, err = p.scanArg()
@@ -102,7 +98,7 @@ func (p *Parser) scanWithMapping() (Token, string) {
 		}
 	case '[':
 		var err error
-		t, tt, err = p.scanArray("")
+		t, tt, err = p.scanArray()
 		if err == nil {
 			tok = ARRAY
 		} else {
@@ -156,15 +152,20 @@ func (p *Parser) scanWithMapping() (Token, string) {
 		}
 
 	case '/':
-		var ttTmp string
+		var builder strings.Builder
+		builder.WriteString("/")
 		for {
-			t, ttTmp = p.scan()
-			tt = tt + ttTmp
+			t, ttTmp := p.scan()
+			if t == scanner.EOF {
+				return ILLEGAL, ""
+			}
+			builder.WriteString(ttTmp)
 			if t == '/' {
 				tok = STRING
 				break
 			}
 		}
+		tt = builder.String()
 
 	case scanner.String:
 		tok = STRING
@@ -221,7 +222,7 @@ func (p *Parser) parseExpr() (Expr, error) {
 		return nil, err
 	}
 
-	// Loop over operations and unary exprs and build a tree based on precendence.
+	// Loop over operations and unary exprs and build a tree based on precedence.
 	for {
 		// If the next token is NOT an operator then return the expression.
 		op, tx := p.scanWithMapping()
@@ -231,7 +232,6 @@ func (p *Parser) parseExpr() (Expr, error) {
 		if !op.isOperator() {
 			p.unscan()
 			return expr, nil
-
 		}
 
 		// Otherwise parse the next unary expression.
@@ -240,7 +240,7 @@ func (p *Parser) parseExpr() (Expr, error) {
 			return nil, err
 		}
 
-		// Assign the new root based on the precendence of the LHS and RHS operators.
+		// Assign the new root based on the precedence of the LHS and RHS operators.
 		if lhs, ok := expr.(*BinaryExpr); ok && lhs.Op.Precedence() <= op.Precedence() {
 			expr = &BinaryExpr{
 				LHS: lhs.LHS,
@@ -251,10 +251,9 @@ func (p *Parser) parseExpr() (Expr, error) {
 			expr = &BinaryExpr{LHS: expr, RHS: rhs, Op: op}
 		}
 	}
-
 }
 
-// parseUnaryExpr parses an non-binary expression.
+// parseUnaryExpr parses a non-binary expression.
 func (p *Parser) parseUnaryExpr() (Expr, error) {
 	// If the first token is a LPAREN then parse it as its own grouped expression.
 	tok, lit := p.scanWithMapping()
@@ -266,7 +265,7 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 
 		// Expect an RPAREN at the end.
 		if tok, _ := p.scanWithMapping(); tok != RPAREN {
-			return nil, fmt.Errorf("Missing )")
+			return nil, fmt.Errorf("missing )")
 		}
 
 		return &ParenExpr{Expr: expr}, nil
@@ -277,24 +276,29 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 	case IDENT:
 		return &VarRef{Val: lit}, nil
 	case STRING:
+		if len(lit) < 2 {
+			return nil, fmt.Errorf("invalid string literal: %s", lit)
+		}
 		return &StringLiteral{Val: lit[1 : len(lit)-1]}, nil
 	case NUMBER:
 		v, err := strconv.ParseFloat(lit, 64)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to parse number")
+			return nil, fmt.Errorf("unable to parse number: %s", lit)
 		}
 		return &NumberLiteral{Val: v}, nil
 	case TRUE, FALSE:
 		return &BooleanLiteral{Val: (tok == TRUE)}, nil
 	case ARRAY:
 		mapVal := []interface{}{}
-		err := json.Unmarshal([]byte(`[`+lit+`]`), &mapVal)
+		if err := json.Unmarshal([]byte(`[`+lit+`]`), &mapVal); err != nil {
+			return nil, fmt.Errorf("unable to parse array: %s", err)
+		}
 		if len(mapVal) == 0 {
-			return nil, fmt.Errorf("Empty Slice not castable")
+			return nil, fmt.Errorf("empty slice not castable")
 		}
 		switch t := mapVal[0].(type) {
 		case string:
-			values := []string{}
+			values := make([]string, 0, len(mapVal))
 			for _, v := range mapVal {
 				str, ok := v.(string)
 				if !ok {
@@ -302,10 +306,9 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 				}
 				values = append(values, str)
 			}
-			ssl := NewSliceStringLiteral(values)
-			return ssl, err
+			return NewSliceStringLiteral(values), nil
 		case float64:
-			values := []float64{}
+			values := make([]float64, 0, len(mapVal))
 			for _, v := range mapVal {
 				f, ok := v.(float64)
 				if !ok {
@@ -313,51 +316,53 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 				}
 				values = append(values, f)
 			}
-			return &SliceNumberLiteral{Val: values}, err
+			return NewSliceNumberLiteral(values), nil
 		default:
-			return nil, fmt.Errorf("Slice of unknow type %s %T", t, t)
+			return nil, fmt.Errorf("slice of unknown type %T", t)
 		}
 
 	default:
-		return nil, fmt.Errorf("Parsing error: tok=%v, lit=%v", tok, lit)
+		return nil, fmt.Errorf("parsing error: tok=%v, lit=%v", tok, lit)
 	}
 }
 
-func (p *Parser) scanArray(tt string) (rune, string, error) {
-	var t rune
-
-	var ttTmp string
-	var sep string
-
+// scanArray reads tokens until ']' and returns the array content as a string.
+func (p *Parser) scanArray() (rune, string, error) {
+	var builder strings.Builder
 	for i := 0; i < maxArrayLen; i++ {
-		t, ttTmp = p.scan()
-		if t == ']' {
-			return t, tt, nil
+		t, ttTmp := p.scan()
+		if t == scanner.EOF {
+			return t, "", fmt.Errorf("unexpected EOF in array, missing ]")
 		}
-
-		tt = tt + sep + ttTmp
+		if t == ']' {
+			return t, builder.String(), nil
+		}
+		builder.WriteString(ttTmp)
 	}
-	return t, tt, fmt.Errorf("parsing error: no ] found in array syntax")
+	return 0, "", fmt.Errorf("parsing error: no ] found in array syntax")
 }
 
-// extract {variable} to variable
-// extract {variable}{key1}{key2} to variable.key1.key2
-// handle variable name which start with a "@"
+// scanArg extracts {variable} to variable,
+// {variable}{key1}{key2} to variable.key1.key2,
+// handles variable names starting with "@".
 func (p *Parser) scanArg() (rune, string, error) {
-	var t rune
-	var tt string
-	var ttTmp string
-	var sep string
-
-	sep = ""
+	var builder strings.Builder
+	sep := ""
 
 	for {
-		t, ttTmp = p.scan()
-		tt = tt + sep + ttTmp
+		t, ttTmp := p.scan()
+		if t == scanner.EOF {
+			return t, builder.String(), fmt.Errorf("unexpected EOF in variable reference, missing }")
+		}
+		builder.WriteString(sep)
+		builder.WriteString(ttTmp)
 		if t == '@' {
 			continue
 		}
-		t, _ := p.scan()
+		t, _ = p.scan()
+		if t == scanner.EOF {
+			return t, builder.String(), fmt.Errorf("unexpected EOF in variable reference, missing }")
+		}
 		// Allow variables to contain "-"
 		if t == '-' {
 			sep = "-"
@@ -368,31 +373,15 @@ func (p *Parser) scanArg() (rune, string, error) {
 			if ti == '{' {
 				sep = "."
 				continue
-			} else {
-				p.unscan()
 			}
-			return t, tt, nil
+			p.unscan()
+			return t, builder.String(), nil
 		}
 
 		if t != '}' {
-			return t, tt, fmt.Errorf("Args error")
+			return t, builder.String(), fmt.Errorf("args error")
 		}
 	}
 }
 
-// Variables ...
-func Variables(expression Expr) []string {
-	return removeDuplicates(expression.Args())
-}
 
-func removeDuplicates(a []string) []string {
-	result := []string{}
-	seen := map[string]string{}
-	for _, val := range a {
-		if _, ok := seen[val]; !ok {
-			result = append(result, val)
-			seen[val] = val
-		}
-	}
-	return result
-}
