@@ -558,6 +558,84 @@ func TestNestedPathErrors(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Whitespace tolerance — extra spaces, tabs, newlines in expressions
+// ---------------------------------------------------------------------------
+
+func TestWhitespaceInPath(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Spaces around dots
+		{cond: `{user . name} == "Alice"`,
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: `{user. name} == "Alice"`,
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: `{user .name} == "Alice"`,
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+
+		// Spaces inside brackets
+		{cond: `{users[ 0 ]} == 42`,
+			args: map[string]interface{}{"users": []interface{}{42, 43, 44}}, result: true},
+		{cond: `{users[0 ]} == 42`,
+			args: map[string]interface{}{"users": []interface{}{42, 43, 44}}, result: true},
+		{cond: `{users[ 0]} == 42`,
+			args: map[string]interface{}{"users": []interface{}{42, 43, 44}}, result: true},
+
+		// Newlines and tabs inside path
+		{cond: "{\nuser\n.\nname\n} == \"Alice\"",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: "{user.\tname} == \"Alice\"",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: "{\tuser\t.\tname\t} == \"Alice\"",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+
+		// Pathological spacing
+		{cond: "{  user  .  name  } == \"Alice\"",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+
+		// Spaces inside brackets in chained path
+		{cond: `{data[ 0 ].name} == "foo"`,
+			args: map[string]interface{}{"data": []interface{}{map[string]interface{}{"name": "foo"}}}, result: true},
+		{cond: `{data[0] . name} == "foo"`,
+			args: map[string]interface{}{"data": []interface{}{map[string]interface{}{"name": "foo"}}}, result: true},
+	})
+}
+
+func TestWhitespaceInExpression(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Leading/trailing whitespace
+		{cond: `  {user.name} == "Alice"`,
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: `{user.name} == "Alice"  `,
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+
+		// Tabs and newlines between tokens
+		{cond: "\t{user.name}\t==\t\"Alice\"",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: "{user.name}\n==\n\"Alice\"",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: "\n{user.name} == \"Alice\"\n",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+
+		// Extra spaces around operators
+		{cond: `{foo}  ==  "bar"`,
+			args: map[string]interface{}{"foo": "bar"}, result: true},
+		{cond: `{foo}    >   10`,
+			args: map[string]interface{}{"foo": 20.0}, result: true},
+
+		// Whitespace in key composition (concat still works across space)
+		{cond: `{user} {name} == "Alice"`,
+			args: map[string]interface{}{"user.name": "Alice"}, result: true},
+		{cond: `{user}  {name}  {tag} == "x"`,
+			args: map[string]interface{}{"user.name.tag": "x"}, result: true},
+
+		// Array literals with spaces
+		{cond: `{color} IN [  "red"  ,  "green"  ]`,
+			args: map[string]interface{}{"color": "red"}, result: true},
+		{cond: `{num} IN [  1  ,  2  ,  3  ]`,
+			args: map[string]interface{}{"num": 2.0}, result: true},
+	})
+}
+
+// ---------------------------------------------------------------------------
 // Mixed flat-key + nested-path in one expression
 // ---------------------------------------------------------------------------
 
