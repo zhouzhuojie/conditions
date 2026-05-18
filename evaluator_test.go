@@ -168,6 +168,68 @@ var validTestData = []struct {
 	// !~
 	{"{status} !~ /^5\\d\\d/", map[string]interface{}{"status": "500"}, false, false},
 	{"{status} !~ /^4\\d\\d/", map[string]interface{}{"status": "500"}, true, false},
+
+	// --- Key composition (concat) edge cases ---
+
+	// Number comparison with composed key
+	{`{user}{age} > 18`, map[string]interface{}{"user.age": 25.0}, true, false},
+	{`{user}{age} > 18`, map[string]interface{}{"user.age": 15.0}, false, false},
+
+	// IN with composed key
+	{`{user}{role} IN ["admin", "moderator"]`, map[string]interface{}{"user.role": "admin"}, true, false},
+	{`{user}{role} IN ["admin", "moderator"]`, map[string]interface{}{"user.role": "viewer"}, false, false},
+
+	// NOT IN with composed key
+	{`{user}{role} NOT IN ["banned"]`, map[string]interface{}{"user.role": "admin"}, true, false},
+	{`{user}{role} NOT IN ["banned"]`, map[string]interface{}{"user.role": "banned"}, false, false},
+
+	// CONTAINS with composed key
+	{`{user}{tags} CONTAINS "urgent"`, map[string]interface{}{"user.tags": []string{"urgent", "billing"}}, true, false},
+	{`{user}{tags} CONTAINS "urgent"`, map[string]interface{}{"user.tags": []string{"spam"}}, false, false},
+
+	// NOT CONTAINS with composed key
+	{`{user}{tags} NOT CONTAINS "spam"`, map[string]interface{}{"user.tags": []string{"urgent", "billing"}}, true, false},
+
+	// Regex with composed key
+	{`{user}{status} =~ /^5\d\d/`, map[string]interface{}{"user.status": "500"}, true, false},
+	{`{user}{status} =~ /^5\d\d/`, map[string]interface{}{"user.status": "400"}, false, false},
+
+	// Hyphenated names with composition
+	{`{my-var}{sub-key} == "val"`, map[string]interface{}{"my-var.sub-key": "val"}, true, false},
+	{`{my-var}{sub-key} == "wrong"`, map[string]interface{}{"my-var.sub-key": "val"}, false, false},
+
+	// Concat in both LHS and RHS
+	{`{a}{x} == {b}{y}`, map[string]interface{}{"a.x": "hello", "b.y": "hello"}, true, false},
+	{`{a}{x} == {b}{y}`, map[string]interface{}{"a.x": "hello", "b.y": "world"}, false, false},
+
+	// Concat inside parentheses
+	{`({user}{age} > 18)`, map[string]interface{}{"user.age": 25.0}, true, false},
+	{`(({user}{age} > 18))`, map[string]interface{}{"user.age": 25.0}, true, false},
+
+	// Four-level concatenation
+	{`{a}{b}{c}{d} == true`, map[string]interface{}{"a.b.c.d": true}, true, false},
+
+	// Concat with AND short-circuit
+	{`false AND {missing}{key}` + " == true", nil, false, false},
+
+	// Concat with OR short-circuit
+	{`true OR {missing}{key}` + " == true", nil, true, false},
+
+	// Concat in compound expression with various operators (parens required
+	// for correct precedence when mixing AND with =~)
+	{`{user}{age} > 18 AND {user}{role} IN ["admin"] AND ({user}{status} =~ /^A/)`,
+		map[string]interface{}{"user.age": 25.0, "user.role": "admin", "user.status": "Active"},
+		true, false},
+
+	// Error: composed key missing from args
+	{`{user}{missing} == true`, map[string]interface{}{"user.name": "Alice"}, false, true},
+
+	// Error: compose with missing second part
+	{`{a}{b} == true`, map[string]interface{}{"a.x": true}, false, true},
+
+	// Error: nested map does NOT work with composed keys — {user}{status}
+	// looks up args["user.status"], not args["user"]["status"]
+	{`{user}{status} == 100`, map[string]interface{}{"user": map[string]interface{}{"status": 100}}, false, true},
 }
 
 func TestValid(t *testing.T) {
@@ -228,6 +290,12 @@ func TestJSON(t *testing.T) {
 		{`{foo} not contains "123"`, `{"foo": ["124"]}`, true, false},
 		{`{foo} not contains "123"`, `{"foo": null}`, false, true},
 		{`{foo} not contains "123"`, `{}`, false, true},
+
+		// JSON interop with composed keys
+		{`{user}{name} == "Alice"`, `{"user.name": "Alice"}`, true, false},
+		{`{user}{age} > 18`, `{"user.age": 25}`, true, false},
+		{`{user}{role} IN ["admin"]`, `{"user.role": "admin"}`, true, false},
+		{`{user}{role} IN ["admin"]`, `{"user.role": "viewer"}`, false, false},
 	}
 
 	for _, test := range tests {

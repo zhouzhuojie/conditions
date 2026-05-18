@@ -45,3 +45,39 @@ func TestVariables(t *testing.T) {
 	assert.Contains(t, vars, "c")
 	assert.Contains(t, vars, "d")
 }
+
+func TestVariablesWithComposedKeys(t *testing.T) {
+	cond := `{user}{name} == "Alice" AND {user}{age} > 18`
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	assert.NoError(t, err)
+
+	vars := Variables(expr)
+	assert.Contains(t, vars, "user.name")
+	assert.Contains(t, vars, "user.age")
+	assert.Equal(t, 2, len(vars))
+	assert.NotContains(t, vars, "user")
+	assert.NotContains(t, vars, "name")
+}
+
+func TestVariablesThreeLevelComposed(t *testing.T) {
+	cond := `{a}{b}{c} == 42`
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	assert.NoError(t, err)
+
+	vars := Variables(expr)
+	assert.Contains(t, vars, "a.b.c")
+	assert.Equal(t, 1, len(vars))
+}
+
+func TestVariablesHyphenatedComposed(t *testing.T) {
+	cond := `{my-var}{sub-key} == "val"`
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	assert.NoError(t, err)
+
+	vars := Variables(expr)
+	assert.Contains(t, vars, "my-var.sub-key")
+	assert.Equal(t, 1, len(vars))
+}
