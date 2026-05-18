@@ -12,6 +12,7 @@ const (
 	// Literals
 	literalBegin
 	IDENT  // Variable references $0, $5, etc
+	PATH   // Nested path references {foo.bar[0]}
 	NUMBER // 12345.67
 	STRING // "abc"
 	ARRAY  // array of values (string or number) ["a","b","c"]  [342,4325,6,4]
@@ -47,6 +48,7 @@ var tokens = []string{
 	EOF:     "EOF",
 
 	IDENT:  "IDENT",
+	PATH:   "PATH",
 	NUMBER: "NUMBER",
 	STRING: "STRING",
 	ARRAY:  "ARRAY",

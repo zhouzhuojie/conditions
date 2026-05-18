@@ -36,6 +36,9 @@ func evaluate(expr Expr, args map[string]interface{}) (Expr, error) {
 	case *VarRef:
 		return resolveVar(n.Val, args)
 
+	case *PathRef:
+		return resolvePathRef(n, args)
+
 	default:
 		// Literal — return as-is
 		return expr, nil

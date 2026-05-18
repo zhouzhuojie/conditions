@@ -12,6 +12,7 @@ type Node interface {
 }
 
 func (*VarRef) node()             {}
+func (*PathRef) node()            {}
 func (*NumberLiteral) node()      {}
 func (*StringLiteral) node()      {}
 func (*BooleanLiteral) node()     {}
@@ -28,6 +29,7 @@ type Expr interface {
 }
 
 func (*VarRef) expr()             {}
+func (*PathRef) expr()            {}
 func (*NumberLiteral) expr()      {}
 func (*StringLiteral) expr()      {}
 func (*BooleanLiteral) expr()     {}
@@ -46,6 +48,41 @@ func (r *VarRef) String() string { return QuoteIdent(r.Val) }
 
 func (r *VarRef) Args() []string {
 	return []string{r.Val}
+}
+
+// PathStep is one step in a nested path traversal.
+// It is either an object property access (.key) or an array index access ([n]).
+type PathStep struct {
+	IsIndex bool   // true for [n], false for .key
+	Key     string // used when IsIndex is false
+	Index   int    // used when IsIndex is true
+}
+
+// PathRef represents a nested variable reference with path traversal steps.
+//
+//	{user.name}       → Root: "user", Steps: [{Key: "name"}]
+//	{users[0]}        → Root: "users", Steps: [{Index: 0}]
+//	{data[0].name}    → Root: "data", Steps: [{Index: 0}, {Key: "name"}]
+type PathRef struct {
+	Root  string
+	Steps []PathStep
+}
+
+// String returns a string representation of the path reference.
+func (r *PathRef) String() string {
+	b := r.Root
+	for _, s := range r.Steps {
+		if s.IsIndex {
+			b += fmt.Sprintf("[%d]", s.Index)
+		} else {
+			b += "." + s.Key
+		}
+	}
+	return b
+}
+
+func (r *PathRef) Args() []string {
+	return []string{r.Root}
 }
 
 // NumberLiteral represents a numeric literal.

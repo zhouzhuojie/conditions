@@ -71,6 +71,37 @@ func TestArgsMethods(t *testing.T) {
 	assert.Equal(t, []string{"x"}, pe.Args())
 }
 
+func TestPathRefString(t *testing.T) {
+	t.Run("dot access", func(t *testing.T) {
+		p := &PathRef{Root: "user", Steps: []PathStep{{Key: "name"}}}
+		assert.Equal(t, "user.name", p.String())
+	})
+	t.Run("array index", func(t *testing.T) {
+		p := &PathRef{Root: "users", Steps: []PathStep{{IsIndex: true, Index: 0}}}
+		assert.Equal(t, "users[0]", p.String())
+	})
+	t.Run("chained", func(t *testing.T) {
+		p := &PathRef{Root: "data", Steps: []PathStep{
+			{IsIndex: true, Index: 0},
+			{Key: "name"},
+		}}
+		assert.Equal(t, "data[0].name", p.String())
+	})
+	t.Run("deep", func(t *testing.T) {
+		p := &PathRef{Root: "a", Steps: []PathStep{
+			{Key: "b"},
+			{IsIndex: true, Index: 1},
+			{Key: "c"},
+		}}
+		assert.Equal(t, "a.b[1].c", p.String())
+	})
+}
+
+func TestPathRefArgs(t *testing.T) {
+	p := &PathRef{Root: "user", Steps: []PathStep{{Key: "name"}}}
+	assert.Equal(t, []string{"user"}, p.Args())
+}
+
 func TestNewSliceStringLiteralPreallocatesMap(t *testing.T) {
 	vals := make([]string, 1000)
 	for i := range vals {

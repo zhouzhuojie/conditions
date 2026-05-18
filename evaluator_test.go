@@ -230,6 +230,90 @@ var validTestData = []struct {
 	// Error: nested map does NOT work with composed keys — {user}{status}
 	// looks up args["user.status"], not args["user"]["status"]
 	{`{user}{status} == 100`, map[string]interface{}{"user": map[string]interface{}{"status": 100}}, false, true},
+
+	// --- Nested path traversal ({foo.bar}, {users[0]}) ---
+
+	// Simple dot access into nested maps
+	{`{user.name} == "Alice"`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, true, false},
+	{`{user.name} == "Bob"`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, false, false},
+
+	// Array index access
+	{`{users[0]} == 42`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, true, false},
+	{`{users[1]} == 43`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, true, false},
+	{`{users[2]} == 99`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, false, false},
+
+	// Negative index
+	{`{users[-1]} == 44`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, true, false},
+
+	// Chained dot + bracket
+	{`{data[0].name} == "foo"`, map[string]interface{}{
+		"data": []interface{}{map[string]interface{}{"name": "foo"}},
+	}, true, false},
+
+	// Deep nesting
+	{`{a.b.c} == 42`, map[string]interface{}{"a": map[string]interface{}{"b": map[string]interface{}{"c": 42.0}}}, true, false},
+
+	// Number comparison
+	{`{user.age} > 18`, map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, true, false},
+	{`{user.age} > 18`, map[string]interface{}{"user": map[string]interface{}{"age": 15.0}}, false, false},
+
+	// IN with nested access
+	{`{user.role} IN ["admin", "moderator"]`, map[string]interface{}{"user": map[string]interface{}{"role": "admin"}}, true, false},
+
+	// CONTAINS with nested access
+	{`{user.tags} CONTAINS "urgent"`, map[string]interface{}{"user": map[string]interface{}{"tags": []string{"urgent", "billing"}}}, true, false},
+
+	// Regex with nested access
+	{`{user.status} =~ /^5\d\d/`, map[string]interface{}{"user": map[string]interface{}{"status": "500"}}, true, false},
+
+	// Path inside parentheses
+	{`({user.age} > 18)`, map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, true, false},
+	{`(({user.age} > 18))`, map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, true, false},
+
+	// Path in both LHS and RHS
+	{`{a.x} == {b.y}`, map[string]interface{}{
+		"a": map[string]interface{}{"x": "hello"},
+		"b": map[string]interface{}{"y": "hello"},
+	}, true, false},
+	{`{a.x} == {b.y}`, map[string]interface{}{
+		"a": map[string]interface{}{"x": "hello"},
+		"b": map[string]interface{}{"y": "world"},
+	}, false, false},
+
+	// @ prefix with path
+	{`{@user.name} == "Alice"`, map[string]interface{}{"@user": map[string]interface{}{"name": "Alice"}}, true, false},
+
+	// Chained: {a.b[0].c.d}
+	{`{a.b[0].c.d} == 1`, map[string]interface{}{
+		"a": map[string]interface{}{
+			"b": []interface{}{
+				map[string]interface{}{
+					"c": map[string]interface{}{"d": 1.0},
+				},
+			},
+		},
+	}, true, false},
+
+	// Path with AND short-circuit
+	{`false AND {missing.deep.key} == true`, nil, false, false},
+
+	// Path with OR short-circuit
+	{`true OR {missing.deep.key} == true`, nil, true, false},
+
+	// Error: path key not found in nested map
+	{`{user.missing} == true`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, false, true},
+
+	// Error: array index out of bounds
+	{`{users[999]} == 42`, map[string]interface{}{"users": []interface{}{1, 2, 3}}, false, true},
+
+	// Error: access key on non-map value
+	{`{user.name.nested} == true`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, false, true},
+
+	// Error: access key on array (should use index)
+	{`{users.foo} == 42`, map[string]interface{}{"users": []interface{}{1, 2, 3}}, false, true},
+
+	// Error: path root not found
+	{`{missing.key} == true`, map[string]interface{}{"foo": "bar"}, false, true},
 }
 
 func TestValid(t *testing.T) {
@@ -296,6 +380,13 @@ func TestJSON(t *testing.T) {
 		{`{user}{age} > 18`, `{"user.age": 25}`, true, false},
 		{`{user}{role} IN ["admin"]`, `{"user.role": "admin"}`, true, false},
 		{`{user}{role} IN ["admin"]`, `{"user.role": "viewer"}`, false, false},
+
+		// JSON interop with nested path traversal
+		{`{user.name} == "Alice"`, `{"user": {"name": "Alice"}}`, true, false},
+		{`{user.age} > 18`, `{"user": {"age": 25}}`, true, false},
+		{`{users[0]} == 42`, `{"users": [42, 43]}`, true, false},
+		{`{data[0].name} == "foo"`, `{"data": [{"name": "foo"}]}`, true, false},
+		{`{data[0].items[1]} == 200`, `{"data": [{"items": [100, 200]}]}`, true, false},
 	}
 
 	for _, test := range tests {

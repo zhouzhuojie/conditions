@@ -31,17 +31,19 @@ import (
 )
 
 func main() {
-    // Parse once — use {group}{field} to reference grouped/nested fields
-    expr, err := conditions.Parse(`{product}{price} > 100 AND {product}{in_stock}`)
+    // Parse once — use {field.subfield} for nested data, {field}{subfield} for flat
+    expr, err := conditions.Parse(`{product.price} > 100 AND {product.in_stock}`)
     if err != nil {
         panic(err)
     }
 
     // Evaluate many times — thread-safe, reuse across goroutines
-    // Data uses flat dotted keys: "product.price", "product.in_stock"
+    // Data can use nested maps (from JSON, API responses, etc.)
     data := map[string]interface{}{
-        "product.price":   150.00,
-        "product.in_stock": true,
+        "product": map[string]interface{}{
+            "price":    150.00,
+            "in_stock": true,
+        },
     }
 
     result, err := conditions.Evaluate(expr, data)
@@ -117,12 +119,49 @@ ok, _ := conditions.Evaluate(expr, map[string]interface{}{
 // ok == true
 ```
 
-> **How it works:** At parse time, consecutive `{...}` groups are detected and concatenated into a single dotted key. The evaluation does a flat lookup — `args["user.name"]` — it does **not** traverse into nested maps.
+> **How it works:** At parse time, consecutive `{...}` groups are detected and concatenated into a single dotted key. The evaluation does a flat map lookup — `args["user.name"]`.
+
+**Nested path traversal** — use dots and brackets inside a single brace group to traverse nested maps and arrays:
+
+```
+{user.name}       → args["user"]["name"]
+{users[0]}        → args["users"][0]
+{data[0].name}    → args["data"][0]["name"]
+{a.b.c}           → args["a"]["b"]["c"]
+{users[-1]}       → args["users"][len-1]   (negative index = from end)
+```
+
+This works naturally with JSON data from external APIs:
+
+```go
+// Data from json.Unmarshal — nested maps and arrays
+data := map[string]interface{}{
+    "user": map[string]interface{}{
+        "name": "Alice",
+        "age":  25,
+        "tags": []interface{}{"admin", "billing"},
+    },
+}
+
+expr, _ := conditions.Parse(
+    `{user.name} == "Alice" AND {user.age} > 18`,
+)
+ok, _ := conditions.Evaluate(expr, data)
+// ok == true
+
+// Array access
+expr2, _ := conditions.Parse(`{user.tags[0]} == "admin"`)
+ok2, _ := conditions.Evaluate(expr2, data)
+// ok2 == true
+```
+
+> **How it works:** At parse time, dots `.` and brackets `[` inside `{...}` are parsed as path traversal steps. At evaluation time, the resolver walks through nested maps (`map[string]interface{}`) and slices (`[]interface{}`) — exactly what `json.Unmarshal` produces.
 
 **`@` prefix** — brace groups starting with `@` keep the `@` in the key:
 
 ```
 {@env}{key}  → args["@env.key"]
+{@env.name}  → args["@env"]["name"]
 ```
 
 Useful for namespacing under a well-known prefix (e.g., environment variables).
@@ -134,40 +173,28 @@ Useful for namespacing under a well-known prefix (e.g., environment variables).
 {my-var}{sub-key} → args["my-var.sub-key"]
 ```
 
-#### Limitations of key composition
+#### Two approaches to structured data
 
-Before using composed keys (`{a}{b}`), understand what it **doesn't** do:
+`conditions` gives you two ways to work with structured data, and you can mix both in one expression:
 
-| What you write | What it resolves to | What it does **not** do |
-|---|---|---|
-| `{user}{name}` | `args["user.name"]` (flat key) | `args["user"]["name"]` (nested map access) |
-| `{data}{items}` | `args["data.items"]` (flat key) | `args["data"]["items"]` (nested map access) |
+| Approach | Syntax | Data shape | Example |
+|---|---|---|---|
+| **Composed keys** | `{a}{b}` | Flat: `{"a.b": val}` | `{user}{name} == "Alice"` |
+| **Path traversal** | `{a.b}` | Nested: `{"a": {"b": val}}` | `{user.name} == "Alice"` |
 
-**Concrete example — what works vs what doesn't:**
+**Choose based on how your data arrives:**
+
+- **Path traversal** (`{user.name}`) — use when consuming JSON from external APIs. `json.Unmarshal` produces nested `map[string]interface{}` and `[]interface{}` which this syntax traverses directly. No data preprocessing needed.
+- **Composed keys** (`{user}{name}`) — use when you control the data shape and want flat, simple maps. Best for configs, feature flags, or when you want to avoid nesting overhead.
+
+**You can even mix both in one expression:**
 
 ```go
-// ✅ Works: data is a flat map with dotted keys
-args := map[string]interface{}{
-    "user.name": "Alice",
-    "user.age":  25,
-}
-expr, _ := conditions.Parse(`{user}{name} == "Alice"`)
-ok, _ := conditions.Evaluate(expr, args) // true
-
-// ❌ Does NOT work: data is a nested map
-args := map[string]interface{}{
-    "user": map[string]interface{}{
-        "name": "Alice",
-        "age":  25,
-    },
-}
-// This will error — "user.name" key not found in the flat map
+expr, _ := conditions.Parse(
+    `{user}{age} > 18 AND {user.tags} CONTAINS "admin"`,
+)
+//   ↑ flat key          ↑ nested path
 ```
-
-**When to use each:**
-
-- **Flat dotted keys (`{"user.name": "Alice"}`) + `{user}{name}`** — use when you control the data shape. Simple, fast, no nesting overhead.
-- **Nested maps (`{"user": {"name": "Alice"}}`)** — use when consuming JSON from external APIs (`json.Unmarshal` produces this shape). Note that the current expression syntax does not traverse nested maps — you must flatten the data before passing it to `Evaluate()`.
 
 ### Operators
 
@@ -319,6 +346,7 @@ Forked from [oleksandr/conditions](https://github.com/oleksandr/conditions).
 Key differences from the original:
 - Variable syntax: `[foo]` → `{foo}`
 - Key composition: `{user}{name}` → `args["user.name"]` (consecutive brace groups join with `.`)
+- Nested path traversal: `{user.name}` → `args["user"]["name"]`, `{users[0]}` → `args["users"][0]`
 - Added `CONTAINS` / `NOT CONTAINS` operators
 - Float comparison with configurable epsilon tolerance
 - Hash map optimization for array `IN` / `CONTAINS`

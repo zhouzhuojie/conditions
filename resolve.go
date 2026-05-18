@@ -14,6 +14,63 @@ func resolveVar(name string, args map[string]interface{}) (Expr, error) {
 	if val == nil {
 		return falseExpr, fmt.Errorf("unsupported argument nil type for %s", name)
 	}
+	return valueToExpr(val)
+}
+
+// resolvePathRef resolves a nested path expression by walking through
+// nested maps and slices in args.
+//
+//	{user.name}    → args["user"]["name"]
+//	{users[0]}     → args["users"][0]
+//	{data[0].name} → args["data"][0]["name"]
+func resolvePathRef(ref *PathRef, args map[string]interface{}) (Expr, error) {
+	current, ok := args[ref.Root]
+	if !ok {
+		return falseExpr, fmt.Errorf("argument: %v not found", ref.Root)
+	}
+
+	for _, step := range ref.Steps {
+		if current == nil {
+			return falseExpr, fmt.Errorf("nil value encountered traversing %s", ref.Root)
+		}
+
+		if step.IsIndex {
+			arr, ok := current.([]interface{})
+			if !ok {
+				return falseExpr, fmt.Errorf("cannot index non-array value traversing %s", ref.Root)
+			}
+			idx := step.Index
+			if idx < 0 {
+				idx = len(arr) + idx
+			}
+			if idx < 0 || idx >= len(arr) {
+				return falseExpr, fmt.Errorf("index %d out of bounds traversing %s", step.Index, ref.Root)
+			}
+			current = arr[idx]
+		} else {
+			m, ok := current.(map[string]interface{})
+			if !ok {
+				return falseExpr, fmt.Errorf("cannot access key %q on non-map value traversing %s", step.Key, ref.Root)
+			}
+			v, ok := m[step.Key]
+			if !ok {
+				return falseExpr, fmt.Errorf("key %q not found traversing %s", step.Key, ref.Root)
+			}
+			current = v
+		}
+	}
+
+	if current == nil {
+		return falseExpr, fmt.Errorf("nil value at end of path %s", ref.Root)
+	}
+	return valueToExpr(current)
+}
+
+// valueToExpr converts a Go value to an AST literal expression.
+func valueToExpr(val interface{}) (Expr, error) {
+	if val == nil {
+		return falseExpr, fmt.Errorf("unsupported nil type")
+	}
 
 	switch v := val.(type) {
 	// Signed integers
@@ -79,7 +136,7 @@ func resolveVar(name string, args map[string]interface{}) (Expr, error) {
 		return convertInterfaceSlice(v)
 	}
 
-	return falseExpr, fmt.Errorf("unsupported argument %s type: %T", name, val)
+	return falseExpr, fmt.Errorf("unsupported type: %T", val)
 }
 
 // toFloat64Slice converts a numeric slice to []float64 using generics.

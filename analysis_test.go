@@ -81,3 +81,25 @@ func TestVariablesHyphenatedComposed(t *testing.T) {
 	assert.Contains(t, vars, "my-var.sub-key")
 	assert.Equal(t, 1, len(vars))
 }
+
+func TestVariablesWithPathRef(t *testing.T) {
+	cond := `{user.name} == "Alice" AND {user.age} > 18`
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	assert.NoError(t, err)
+
+	vars := Variables(expr)
+	assert.Contains(t, vars, "user")
+	assert.Equal(t, 1, len(vars))
+}
+
+func TestVariablesWithPathRefArray(t *testing.T) {
+	cond := `{users[0].name} == "Alice"`
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	assert.NoError(t, err)
+
+	vars := Variables(expr)
+	assert.Contains(t, vars, "users")
+	assert.Equal(t, 1, len(vars))
+}

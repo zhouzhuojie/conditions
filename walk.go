@@ -19,6 +19,9 @@ func Walk(v Visitor, node Node) {
 
 	case *ParenExpr:
 		Walk(v, n.Expr)
+
+	case *PathRef:
+		// Leaf node — Steps are metadata, no child nodes to walk.
 	}
 }
 
