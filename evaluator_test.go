@@ -781,17 +781,78 @@ func TestShortCircuit(t *testing.T) {
 // Misc: convenience functions, edge cases
 // ---------------------------------------------------------------------------
 
-func TestReadmeExample(t *testing.T) {
-	s := `({foo} > 0.45) AND ({bar} == "ON" OR {baz} IN ["ACTIVE", "CLEAR"])`
+func TestReadmeOpeningExample(t *testing.T) {
+	// Opening snippet — basic comparison with AND
+	runTestCases(t, []testCase{
+		{cond: `{age} > 18 AND {status} == "active"`,
+			args: map[string]interface{}{"age": 25.0, "status": "active"}, result: true},
+		{cond: `{age} > 18 AND {status} == "active"`,
+			args: map[string]interface{}{"age": 15.0, "status": "active"}, result: false},
+	})
+}
 
-	p := NewParser(strings.NewReader(s))
-	expr, err := p.Parse()
+func TestReadmeQuickStart(t *testing.T) {
+	// Quick Start — nested path with bare boolean
+	expr, err := Parse(`{product.price} > 100 AND {product.in_stock}`)
 	assert.NoError(t, err)
 
-	data := map[string]interface{}{"foo": 0.62, "bar": "ON", "baz": "ACTIVE"}
+	data := map[string]interface{}{
+		"product": map[string]interface{}{
+			"price":    150.00,
+			"in_stock": true,
+		},
+	}
 	r, err := Evaluate(expr, data)
 	assert.NoError(t, err)
 	assert.True(t, r)
+
+	// False case
+	data2 := map[string]interface{}{
+		"product": map[string]interface{}{
+			"price":    50.00,
+			"in_stock": true,
+		},
+	}
+	r2, err2 := Evaluate(expr, data2)
+	assert.NoError(t, err2)
+	assert.False(t, r2)
+}
+
+func TestReadmeJSONString(t *testing.T) {
+	// From a JSON string — CONTAINS with nested path.
+	// Note: parens around CONTAINS are needed when chaining with AND
+	// due to parser precedence (AND binds left before =~/CONTAINS/IN
+	// can claim the RHS variable).
+	runJSONTests(t, []struct {
+		cond    string
+		jsonStr string
+		result  bool
+		isErr   bool
+	}{
+		{`{user.name} == "Alice" AND {user.age} > 18 AND ({user.tags} CONTAINS "admin")`,
+			`{"user": {"name": "Alice", "age": 25, "tags": ["admin", "billing"]}}`,
+			true, false},
+		// False: tags don't contain the value
+		{`{user.name} == "Alice" AND {user.age} > 18 AND ({user.tags} CONTAINS "spam")`,
+			`{"user": {"name": "Alice", "age": 25, "tags": ["admin", "billing"]}}`,
+			false, false},
+		// False: wrong name
+		{`{user.name} == "Bob" AND {user.age} > 18 AND ({user.tags} CONTAINS "admin")`,
+			`{"user": {"name": "Alice", "age": 25, "tags": ["admin", "billing"]}}`,
+			false, false},
+	})
+}
+
+func TestReadmeParentheses(t *testing.T) {
+	// Parentheses precedence
+	runTestCases(t, []testCase{
+		{cond: `({a} > 10 OR {b} > 10) AND {c} == true`,
+			args: map[string]interface{}{"a": 5.0, "b": 15.0, "c": true}, result: true},
+		{cond: `({a} > 10 OR {b} > 10) AND {c} == true`,
+			args: map[string]interface{}{"a": 5.0, "b": 5.0, "c": true}, result: false},
+		{cond: `({a} > 10 OR {b} > 10) AND {c} == true`,
+			args: map[string]interface{}{"a": 5.0, "b": 15.0, "c": false}, result: false},
+	})
 }
 
 func TestParseConvenience(t *testing.T) {

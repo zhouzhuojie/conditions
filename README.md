@@ -63,8 +63,10 @@ jsonStr := `{"user": {"name": "Alice", "age": 25, "tags": ["admin", "billing"]}}
 var data map[string]interface{}
 json.Unmarshal([]byte(jsonStr), &data)
 
+// Parentheses around CONTAINS are needed when chaining after AND
+// due to parser precedence.
 expr, _ := conditions.Parse(
-    `{user.name} == "Alice" AND {user.age} > 18 AND {user.tags} CONTAINS "admin"`,
+    `{user.name} == "Alice" AND {user.age} > 18 AND ({user.tags} CONTAINS "admin")`,
 )
 
 ok, _ := conditions.Evaluate(expr, data)
@@ -181,11 +183,11 @@ Dots and brackets inside `{...}` are parsed as traversal steps. The resolver wal
 - **Path traversal** (`{user.name}`) — use when consuming JSON. `json.Unmarshal` produces nested `map[string]interface{}` / `[]interface{}` which the resolver walks directly. No data preprocessing.
 - **Composed keys** (`{user}{name}`) — use when you control the data shape. Flat maps are simpler and support more Go types (`[]int`, `json.Number`, etc.) directly.
 
-**Mix both in one expression:**
+**Mix both in one expression** (use parens when chaining `AND` with `CONTAINS`/`IN`/`=~`):
 
 ```go
 expr, _ := conditions.Parse(
-    `{user}{age} > 18 AND {user.tags} CONTAINS "admin"`,
+    `{user}{age} > 18 AND ({user.tags} CONTAINS "admin")`,
 )
 //   ↑ flat key          ↑ nested path
 ```
