@@ -68,6 +68,34 @@ for _, order := range orders {
 }
 ```
 
+### From a JSON string
+
+When your data arrives as JSON, unmarshal it first, then evaluate against it:
+
+```go
+import (
+    "encoding/json"
+    "github.com/zhouzhuojie/conditions"
+)
+
+jsonStr := `{"user": {"name": "Alice", "age": 25, "tags": ["admin", "billing"]}}`
+
+// Step 1: Unmarshal JSON into a map
+var data map[string]interface{}
+json.Unmarshal([]byte(jsonStr), &data)
+
+// Step 2: Parse the condition
+expr, _ := conditions.Parse(
+    `{user.name} == "Alice" AND {user.age} > 18 AND {user.tags} CONTAINS "admin"`,
+)
+
+// Step 3: Evaluate
+ok, _ := conditions.Evaluate(expr, data)
+// ok == true
+```
+
+The path traversal syntax (`{user.name}`, `{user.tags}`) was designed to match the nested structure that `json.Unmarshal` produces — no data transformation needed.
+
 ---
 
 ## Syntax
