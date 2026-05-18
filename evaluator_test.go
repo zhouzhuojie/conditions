@@ -588,6 +588,10 @@ func TestMixedKeyCompositionAndPath(t *testing.T) {
 // JSON interoperability
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// JSON-based tests — real json.Unmarshal roundtrip
+// ---------------------------------------------------------------------------
+
 func TestJSONInterop(t *testing.T) {
 	runJSONTests(t, []struct {
 		cond    string
@@ -624,6 +628,130 @@ func TestJSONInterop(t *testing.T) {
 		{`{users[0]} == 42`, `{"users": [42, 43]}`, true, false},
 		{`{data[0].name} == "foo"`, `{"data": [{"name": "foo"}]}`, true, false},
 		{`{data[0].items[1]} == 200`, `{"data": [{"items": [100, 200]}]}`, true, false},
+	})
+}
+
+func TestJSONComprehensive(t *testing.T) {
+	runJSONTests(t, []struct {
+		cond    string
+		jsonStr string
+		result  bool
+		isErr   bool
+	}{
+		// ── Flat key types from JSON ──────────────────────────────────────
+
+		{`{bool_val} == true`, `{"bool_val": true}`, true, false},
+		{`{bool_val} == false`, `{"bool_val": true}`, false, false},
+		{`{str_val} == "hello"`, `{"str_val": "hello"}`, true, false},
+		{`{num_val} > 10`, `{"num_val": 15}`, true, false},
+		{`{num_val} >= 10`, `{"num_val": 10}`, true, false},
+		{`{num_val} == 0`, `{"num_val": 0}`, true, false},
+		{`{num_val} == -5`, `{"num_val": -5}`, true, false},
+
+		// ── Nested objects (dot path) ────────────────────────────────────
+
+		{`{a.b} == 42`, `{"a": {"b": 42}}`, true, false},
+		{`{a.b.c} == 42`, `{"a": {"b": {"c": 42}}}`, true, false},
+		{`{a.b.c.d} == 42`, `{"a": {"b": {"c": {"d": 42}}}}`, true, false},
+		{`{a.b} == 99`, `{"a": {"b": 42}}`, false, false},
+
+		// ── Array access ─────────────────────────────────────────────────
+
+		{`{arr[0]} == 1`, `{"arr": [1, 2, 3]}`, true, false},
+		{`{arr[1]} == 2`, `{"arr": [1, 2, 3]}`, true, false},
+		{`{arr[2]} == 3`, `{"arr": [1, 2, 3]}`, true, false},
+		{`{arr[-1]} == 3`, `{"arr": [1, 2, 3]}`, true, false},
+		{`{arr[-2]} == 2`, `{"arr": [1, 2, 3]}`, true, false},
+		{`{arr[-3]} == 1`, `{"arr": [1, 2, 3]}`, true, false},
+
+		// ── Array of objects ─────────────────────────────────────────────
+
+		{`{data[0].id} == 1`,
+			`{"data": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]}`,
+			true, false},
+		{`{data[1].name} == "Bob"`,
+			`{"data": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]}`,
+			true, false},
+		{`{data[0].name} == "Bob"`,
+			`{"data": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]}`,
+			false, false},
+
+		// ── Nested arrays (matrix) ───────────────────────────────────────
+
+		{`{matrix[0][0]} == 1`, `{"matrix": [[1, 2], [3, 4]]}`, true, false},
+		{`{matrix[0][1]} == 2`, `{"matrix": [[1, 2], [3, 4]]}`, true, false},
+		{`{matrix[1][0]} == 3`, `{"matrix": [[1, 2], [3, 4]]}`, true, false},
+		{`{matrix[1][1]} == 4`, `{"matrix": [[1, 2], [3, 4]]}`, true, false},
+
+		// ── Mixed nested structures ──────────────────────────────────────
+
+		// Object → array → object → field
+		{`{store.employees[0].name} == "Alice"`,
+			`{"store": {"employees": [{"name": "Alice", "role": "dev"}, {"name": "Bob", "role": "qa"}]}}`,
+			true, false},
+		// Object → array → object → field (second element)
+		{`{store.employees[1].role} == "qa"`,
+			`{"store": {"employees": [{"name": "Alice", "role": "dev"}, {"name": "Bob", "role": "qa"}]}}`,
+			true, false},
+		// Multiple array levels — access 2nd team's 2nd lead
+		{`{org.departments[0].teams[1].leads[1]} == "Carol"`,
+			`{"org": {"departments": [{"name": "Eng", "teams": [{"leads": ["Alice"]}, {"leads": ["Bob", "Carol"]}]}]}}`,
+			true, false},
+		{`{org.departments[0].teams[1].leads[0]} == "Bob"`,
+			`{"org": {"departments": [{"name": "Eng", "teams": [{"leads": ["Alice"]}, {"leads": ["Bob", "Carol"]}]}]}}`,
+			true, false},
+
+		// ── Boolean in nested object ─────────────────────────────────────
+
+		{`{meta.enabled} == true`,
+			`{"meta": {"enabled": true}}`,
+			true, false},
+		{`{meta.enabled}`, // bare boolean ref works
+			`{"meta": {"enabled": true}}`,
+			true, false},
+
+		// ── Nested path across various operators ─────────────────────────
+
+		{`{user.age} > 18 AND {user.name} == "Alice"`,
+			`{"user": {"name": "Alice", "age": 25}}`,
+			true, false},
+		{`{user.age} > 18 AND {user.name} == "Bob"`,
+			`{"user": {"name": "Alice", "age": 25}}`,
+			false, false},
+		{`{user.role} IN ["admin", "moderator"]`,
+			`{"user": {"role": "admin", "name": "Alice"}}`,
+			true, false},
+		{`{user.tags} CONTAINS "urgent"`,
+			`{"user": {"tags": ["urgent", "billing"]}}`,
+			true, false},
+		{`{user.tags} CONTAINS "spam"`,
+			`{"user": {"tags": ["urgent", "billing"]}}`,
+			false, false},
+		{`{user.status} =~ /^A/`,
+			`{"user": {"status": "Active"}}`,
+			true, false},
+		{`{user.score} >= 1000`,
+			`{"user": {"score": 1500}}`,
+			true, false},
+
+		// ── Error cases with JSON ────────────────────────────────────────
+
+		// Root key missing entirely
+		{`{missing.key} == true`, `{}`, false, true},
+		// Nested key missing
+		{`{user.missing} == true`, `{"user": {"name": "Alice"}}`, false, true},
+		// Access key on string (not a map)
+		{`{user.name.nested} == true`, `{"user": {"name": "Alice"}}`, false, true},
+		// Access key on array (should use index)
+		{`{users.key} == 1`, `{"users": [1, 2, 3]}`, false, true},
+		// Array index out of bounds
+		{`{users[999]} == 1`, `{"users": [1, 2, 3]}`, false, true},
+		// Larger negative than length
+		{`{users[-10]} == 1`, `{"users": [1, 2, 3]}`, false, true},
+		// Null value as root
+		{`{foo} == true`, `{"foo": null}`, false, true},
+		// Null as intermediate value
+		{`{user.name} == "Alice"`, `{"user": null}`, false, true},
 	})
 }
 
