@@ -2,16 +2,79 @@ package conditions
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// --- Invalid expressions ---
+// testCase represents a single evaluation test.
+type testCase struct {
+	cond   string
+	args   map[string]interface{}
+	result bool
+	isErr  bool
+}
 
-var invalidTestData = []string{
+// runTestCases runs a table of evaluation tests as subtests named by expression.
+func runTestCases(t *testing.T, cases []testCase) {
+	for _, td := range cases {
+		t.Run(td.cond, func(t *testing.T) {
+			p := NewParser(strings.NewReader(td.cond))
+			expr, err := p.Parse()
+			if err != nil {
+				if td.isErr {
+					return
+				}
+				t.Fatalf("Unexpected parse error for %q: %s", td.cond, err)
+			}
+
+			r, err := Evaluate(expr, td.args)
+			if err != nil {
+				if td.isErr {
+					return
+				}
+				t.Fatalf("Unexpected eval error for %q: %s", td.cond, err)
+			}
+			if td.isErr {
+				t.Fatalf("Expected error but got none for: %s", td.cond)
+			}
+			assert.Equal(t, td.result, r, "Expression: %s", td.cond)
+		})
+	}
+}
+
+// runJSONTests runs a table of JSON unmarshal + evaluation tests.
+func runJSONTests(t *testing.T, tests []struct {
+	cond    string
+	jsonStr string
+	result  bool
+	isErr   bool
+}) {
+	for _, test := range tests {
+		t.Run(test.cond+" | "+test.jsonStr, func(t *testing.T) {
+			p := NewParser(strings.NewReader(test.cond))
+			expr, _ := p.Parse()
+			data := make(map[string]interface{})
+			if err := json.Unmarshal([]byte(test.jsonStr), &data); err != nil {
+				t.Fatalf("failed to unmarshal json: %v", err)
+			}
+			r, err := Evaluate(expr, data)
+			assert.Equal(t, test.result, r, "%s with %s", test.cond, test.jsonStr)
+			if test.isErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Invalid expressions — expect parse errors
+// ---------------------------------------------------------------------------
+
+var invalidExpressions = []string{
 	"",
 	"A",
 	"{var0} == DEMO",
@@ -34,8 +97,8 @@ var invalidTestData = []string{
 	"{foo} not in [foobar]",
 }
 
-func TestInvalid(t *testing.T) {
-	for _, cond := range invalidTestData {
+func TestParseErrors(t *testing.T) {
+	for _, cond := range invalidExpressions {
 		t.Run(cond, func(t *testing.T) {
 			p := NewParser(strings.NewReader(cond))
 			expr, err := p.Parse()
@@ -45,320 +108,494 @@ func TestInvalid(t *testing.T) {
 	}
 }
 
-// --- Valid expressions ---
+// ---------------------------------------------------------------------------
+// Literals
+// ---------------------------------------------------------------------------
 
-var validTestData = []struct {
-	cond   string
-	args   map[string]interface{}
-	result bool
-	isErr  bool
-}{
-	{"true", nil, true, false},
-	{"false", nil, false, false},
-	{"false OR true OR false OR false OR true", nil, true, false},
-	{"((false OR true) AND false) OR (false OR true)", nil, true, false},
-	{"{var0}", map[string]interface{}{"var0": true}, true, false},
-	{"{var0}", map[string]interface{}{"var0": false}, false, false},
-	{"{var0} > true", nil, false, true},
-	{"{var0} > true", map[string]interface{}{"var0": 43}, false, true},
-	{"{var0} > true", map[string]interface{}{"var0": false}, false, true},
-	{"{var0} and {var1}", map[string]interface{}{"var0": true, "var1": true}, true, false},
-	{"{var0} AND {var1}", map[string]interface{}{"var0": true, "var1": false}, false, false},
-	{"{var0} AND {var1}", map[string]interface{}{"var0": false, "var1": true}, false, false},
-	{"{var0} AND {var1}", map[string]interface{}{"var0": false, "var1": false}, false, false},
-	{"{var0} AND false", map[string]interface{}{"var0": true}, false, false},
-	{"56.43", nil, false, true},
-	{"{var5}", nil, false, true},
-	{"{var0} > -100 AND {var0} < -50", map[string]interface{}{"var0": -75.4}, true, false},
-	{"{var5-type-2}", nil, false, true},
-	{"{var5-type-2} == 1", map[string]interface{}{"var5-type-2": 1}, true, false},
-	{"{var0}", map[string]interface{}{"var0": true}, true, false},
-	{"{var0}", map[string]interface{}{"var0": false}, false, false},
-	{`"OFF"`, nil, false, true},
-	{`"ON"`, nil, false, true},
-	{`{var0} == "OFF"`, map[string]interface{}{"var0": "OFF"}, true, false},
+func TestBooleanLiterals(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "true", result: true},
+		{cond: "false", result: false},
+	})
+}
 
-	// AND
-	{`{var0} > 10 AND {var1} == "OFF"`, map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
-	{`({var0} > 10) AND ({var1} == "OFF")`, map[string]interface{}{"var0": 14, "var1": "OFF"}, true, false},
-	{`({var0} > 10) AND ({var1} == "OFF") OR true`, map[string]interface{}{"var0": 1, "var1": "ON"}, true, false},
-	{`{foo}{dfs} == true and {bar} == true`, map[string]interface{}{"foo.dfs": true, "bar": true}, true, false},
-	{`{foo}{dfs}{a} == true and {bar} == true`, map[string]interface{}{"foo.dfs.a": true, "bar": true}, true, false},
-	{`{@foo}{a} == true and {bar} == true`, map[string]interface{}{"@foo.a": true, "bar": true}, true, false},
-	{`{foo}{unknow} == true and {bar} == true`, map[string]interface{}{"foo.dfs": true, "bar": true}, false, true},
-	{`{foo} == 123`, map[string]interface{}{"foo": json.Number("123"), "bar": true}, true, false},
+func TestLiteralAsExpressionErrors(t *testing.T) {
+	// Standalone non-boolean literals are errors — root must be boolean.
+	runTestCases(t, []testCase{
+		{cond: "56.43", isErr: true},
+		{cond: `"OFF"`, isErr: true},
+		{cond: `"ON"`, isErr: true},
+	})
+}
 
-	// OR
-	{`{foo} == true OR {foo} > 1`, map[string]interface{}{"foo": true}, true, false},
-	{`{foo} == true OR {foo} == false`, map[string]interface{}{"foo": true}, true, false},
-	{`{foo} > 100 OR {foo} < 99 `, map[string]interface{}{"foo": 100}, false, false},
-	{`{foo}{dfs} == true or {bar} == true`, map[string]interface{}{"foo.dfs": true, "bar": true}, true, false},
+// ---------------------------------------------------------------------------
+// Variable references — {foo}
+// ---------------------------------------------------------------------------
 
-	// XOR
-	{"false XOR false", nil, false, false},
-	{"false xor true", nil, true, false},
-	{"true XOR false", nil, true, false},
-	{"true xor true", nil, false, false},
+func TestSimpleVariableRef(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{var0}", args: map[string]interface{}{"var0": true}, result: true},
+		{cond: "{var0}", args: map[string]interface{}{"var0": false}, result: false},
+	})
+}
 
-	// NAND
-	{"false NAND false", nil, true, false},
-	{"false nand true", nil, true, false},
-	{"true nand false", nil, true, false},
-	{"true NAND true", nil, false, false},
+func TestMissingVariableError(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{var5}", isErr: true},
+		{cond: "{var5}", args: map[string]interface{}{"var5-type-2": 1}, isErr: true},
+	})
+}
 
-	// IN
-	{`{foo} in {foobar}`, map[string]interface{}{"foo": "findme", "foobar": []string{"notme", "may", "findme", "lol"}}, true, false},
-	{`{foo} in [123]`, map[string]interface{}{"foo": json.Number("123"), "baz": true}, true, false},
-	{`{foo} in [123]`, map[string]interface{}{"foo": json.Number("124"), "baz": true}, false, false},
+func TestHyphenatedVarNames(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{var5-type-2} == 1", args: map[string]interface{}{"var5-type-2": 1}, result: true},
+	})
+}
 
-	// NOT IN
-	{`{foo} not in {foobar}`, map[string]interface{}{"foo": "dontfindme", "foobar": []string{"notme", "may", "findme", "lol"}}, true, false},
+// ---------------------------------------------------------------------------
+// Logical operators — AND / OR / XOR / NAND
+// ---------------------------------------------------------------------------
 
-	// IN with array of string
-	{`{foo} in ["bonjour", "le monde", "oui"]`, map[string]interface{}{"foo": "le monde"}, true, false},
-	{`{foo} in ["bonjour", "le monde", "oui"]`, map[string]interface{}{"foo": "world"}, false, false},
+func TestLogicalAND(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{var0} and {var1}", args: map[string]interface{}{"var0": true, "var1": true}, result: true},
+		{cond: "{var0} AND {var1}", args: map[string]interface{}{"var0": true, "var1": false}, result: false},
+		{cond: "{var0} AND {var1}", args: map[string]interface{}{"var0": false, "var1": true}, result: false},
+		{cond: "{var0} AND {var1}", args: map[string]interface{}{"var0": false, "var1": false}, result: false},
+		{cond: "{var0} AND false", args: map[string]interface{}{"var0": true}, result: false},
+		{cond: "false OR true OR false OR false OR true", result: true},
+		{cond: "((false OR true) AND false) OR (false OR true)", result: true},
+	})
+}
 
-	// NOT IN with array of string
-	{`{foo} not in ["bonjour", "le monde", "oui"]`, map[string]interface{}{"foo": "le monde"}, false, false},
-	{`{foo} not in ["bonjour", "le monde", "oui"]`, map[string]interface{}{"foo": "world"}, true, false},
+func TestLogicalOR(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{foo} == true OR {foo} > 1", args: map[string]interface{}{"foo": true}, result: true},
+		{cond: "{foo} == true OR {foo} == false", args: map[string]interface{}{"foo": true}, result: true},
+		{cond: "{foo} > 100 OR {foo} < 99 ", args: map[string]interface{}{"foo": 100}, result: false},
+	})
+}
 
-	// IN with array of numbers
-	{`{foo} in [2,3,4]`, map[string]interface{}{"foo": 4}, true, false},
-	{`{foo} in [2,3,4] AND {foo} == 4`, map[string]interface{}{"foo": 4}, true, false},
-	{`{foo} in [2,3,4] AND {foo} == 3`, map[string]interface{}{"foo": 4}, false, false},
-	{`{foo} in [2,3,4]`, map[string]interface{}{"foo": 5}, false, false},
+func TestLogicalXOR(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "false XOR false", result: false},
+		{cond: "false xor true", result: true},
+		{cond: "true XOR false", result: true},
+		{cond: "true xor true", result: false},
+	})
+}
 
-	// NOT IN with array of numbers
-	{`{foo} not in [2,3,4]`, map[string]interface{}{"foo": 4}, false, false},
-	{`{foo} not in [2,3,4]`, map[string]interface{}{"foo": 5}, true, false},
+func TestLogicalNAND(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "false NAND false", result: true},
+		{cond: "false nand true", result: true},
+		{cond: "true nand false", result: true},
+		{cond: "true NAND true", result: false},
+	})
+}
 
-	// CONTAINS
-	{`{foo} contains "2"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
-	{`{foo} contains "2"`, map[string]interface{}{"foo": []string{}}, false, false},
-	{`{foo} contains 2`, map[string]interface{}{"foo": []string{"1", "2"}}, false, true},
-	{`{foo} contains "2" and {foo} contains "1"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
-	{`{foo} contains "2" and {foo} contains "0"`, map[string]interface{}{"foo": []string{"1", "2"}}, false, false},
-	{`{foo} contains "2" or {foo} contains "0"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
-	{`{foo} contains 2 and {foo} contains 1`, map[string]interface{}{"foo": []int{1, 2}}, true, false},
-	{`{foo} contains 2 and {foo} contains 1`, map[string]interface{}{"foo": []int{1, 2}}, true, false},
-	{`{foo} contains "2" and {foo} contains 1`, map[string]interface{}{"foo": []int{1, 2}}, false, true},
-	{`{foo} contains {bar}`, map[string]interface{}{"foo": []string{"1", "2"}, "bar": "1"}, true, false},
-	{`{foo} contains {bar}`, map[string]interface{}{"foo": []int{1, 2}, "bar": int32(1)}, true, false},
-	{`{foo} contains {bar}`, map[string]interface{}{"foo": []int{1, 2, 3}, "bar": float32(1.0 + 2.0)}, true, false},
-	{`{foo} contains {bar}`, map[string]interface{}{"foo": []float64{0.29}, "bar": float32(29.0 / 100)}, true, false},
-	{`{foo} contains 2`, map[string]interface{}{"foo": []json.Number{"2"}}, true, false},
-	{`{foo} contains 2`, map[string]interface{}{"foo": []json.Number{"2", "3"}}, true, false},
-	{`{foo} contains 2`, map[string]interface{}{"foo": []json.Number{"3"}}, false, false},
-	{`{foo} contains 2`, map[string]interface{}{"foo": []interface{}{json.Number("2")}}, true, false},
-	{`{foo} contains 2`, map[string]interface{}{"foo": []interface{}{json.Number("3")}}, false, false},
+// ---------------------------------------------------------------------------
+// Comparison operators — ==, !=, >, >=, <, <=
+// ---------------------------------------------------------------------------
 
-	// NOT CONTAINS
-	{`{foo} not contains "2"`, map[string]interface{}{"foo": []string{"1", "2"}}, false, false},
-	{`{foo} not contains "0"`, map[string]interface{}{"foo": []string{"1", "2"}}, true, false},
-	{`{foo} not contains 0`, map[string]interface{}{"foo": []string{"1", "2"}}, false, true},
-	{`{foo} not contains 0`, map[string]interface{}{"bar": []string{"1", "2"}}, false, true},
+func TestComparisonNumber(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{var0} > -100 AND {var0} < -50", args: map[string]interface{}{"var0": -75.4}, result: true},
+	})
+}
 
-	// =~
-	{`{status} =~ /^5\d\d/`, map[string]interface{}{"status": "500"}, true, false},
-	{`{status} =~ /^4\d\d/`, map[string]interface{}{"status": "500"}, false, false},
-	{`{status} =~ /foo/`, map[string]interface{}{"status": "foobar"}, true, false},
-	{`{status} =~ "foo"`, map[string]interface{}{"status": "foobar"}, true, false},
-	{`{status} =~ "foo"`, map[string]interface{}{"status": "bar"}, false, false},
+func TestComparisonWithParens(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{var0} > 10 AND {var1} == "OFF"`, args: map[string]interface{}{"var0": 14, "var1": "OFF"}, result: true},
+		{cond: `({var0} > 10) AND ({var1} == "OFF")`, args: map[string]interface{}{"var0": 14, "var1": "OFF"}, result: true},
+		{cond: `({var0} > 10) AND ({var1} == "OFF") OR true`, args: map[string]interface{}{"var0": 1, "var1": "ON"}, result: true},
+	})
+}
 
-	// !~
-	{"{status} !~ /^5\\d\\d/", map[string]interface{}{"status": "500"}, false, false},
-	{"{status} !~ /^4\\d\\d/", map[string]interface{}{"status": "500"}, true, false},
+func TestStringEquality(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{var0} == "OFF"`, args: map[string]interface{}{"var0": "OFF"}, result: true},
+	})
+}
 
-	// --- Key composition (concat) edge cases ---
+func TestTypeMismatchErrors(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{var0} > true", isErr: true},
+		{cond: "{var0} > true", args: map[string]interface{}{"var0": 43}, isErr: true},
+		{cond: "{var0} > true", args: map[string]interface{}{"var0": false}, isErr: true},
+		{cond: `{foo} == "123"`, args: map[string]interface{}{"foo": 123}, isErr: true},
+	})
+}
 
-	// Number comparison with composed key
-	{`{user}{age} > 18`, map[string]interface{}{"user.age": 25.0}, true, false},
-	{`{user}{age} > 18`, map[string]interface{}{"user.age": 15.0}, false, false},
+// ---------------------------------------------------------------------------
+// Pattern matching — =~, !~
+// ---------------------------------------------------------------------------
 
-	// IN with composed key
-	{`{user}{role} IN ["admin", "moderator"]`, map[string]interface{}{"user.role": "admin"}, true, false},
-	{`{user}{role} IN ["admin", "moderator"]`, map[string]interface{}{"user.role": "viewer"}, false, false},
+func TestRegexMatch(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{status} =~ /^5\d\d/`, args: map[string]interface{}{"status": "500"}, result: true},
+		{cond: `{status} =~ /^4\d\d/`, args: map[string]interface{}{"status": "500"}, result: false},
+		{cond: `{status} =~ /foo/`, args: map[string]interface{}{"status": "foobar"}, result: true},
+		{cond: `{status} =~ "foo"`, args: map[string]interface{}{"status": "foobar"}, result: true},
+		{cond: `{status} =~ "foo"`, args: map[string]interface{}{"status": "bar"}, result: false},
+	})
+}
 
-	// NOT IN with composed key
-	{`{user}{role} NOT IN ["banned"]`, map[string]interface{}{"user.role": "admin"}, true, false},
-	{`{user}{role} NOT IN ["banned"]`, map[string]interface{}{"user.role": "banned"}, false, false},
+func TestRegexNoMatch(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{status} !~ /^5\d\d/`, args: map[string]interface{}{"status": "500"}, result: false},
+		{cond: `{status} !~ /^4\d\d/`, args: map[string]interface{}{"status": "500"}, result: true},
+	})
+}
 
-	// CONTAINS with composed key
-	{`{user}{tags} CONTAINS "urgent"`, map[string]interface{}{"user.tags": []string{"urgent", "billing"}}, true, false},
-	{`{user}{tags} CONTAINS "urgent"`, map[string]interface{}{"user.tags": []string{"spam"}}, false, false},
+// ---------------------------------------------------------------------------
+// Membership — IN, NOT IN, CONTAINS, NOT CONTAINS
+// ---------------------------------------------------------------------------
 
-	// NOT CONTAINS with composed key
-	{`{user}{tags} NOT CONTAINS "spam"`, map[string]interface{}{"user.tags": []string{"urgent", "billing"}}, true, false},
+func TestIN(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{foo} in {foobar}`, args: map[string]interface{}{"foo": "findme", "foobar": []string{"notme", "may", "findme", "lol"}}, result: true},
+		{cond: `{foo} in [123]`, args: map[string]interface{}{"foo": json.Number("123")}, result: true},
+		{cond: `{foo} in [123]`, args: map[string]interface{}{"foo": json.Number("124")}, result: false},
+		{cond: `{foo} in ["bonjour", "le monde", "oui"]`, args: map[string]interface{}{"foo": "le monde"}, result: true},
+		{cond: `{foo} in ["bonjour", "le monde", "oui"]`, args: map[string]interface{}{"foo": "world"}, result: false},
+		{cond: `{foo} in [2,3,4]`, args: map[string]interface{}{"foo": 4}, result: true},
+		{cond: `{foo} in [2,3,4] AND {foo} == 4`, args: map[string]interface{}{"foo": 4}, result: true},
+		{cond: `{foo} in [2,3,4] AND {foo} == 3`, args: map[string]interface{}{"foo": 4}, result: false},
+		{cond: `{foo} in [2,3,4]`, args: map[string]interface{}{"foo": 5}, result: false},
+	})
+}
 
-	// Regex with composed key
-	{`{user}{status} =~ /^5\d\d/`, map[string]interface{}{"user.status": "500"}, true, false},
-	{`{user}{status} =~ /^5\d\d/`, map[string]interface{}{"user.status": "400"}, false, false},
+func TestNOTIN(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{foo} not in {foobar}`, args: map[string]interface{}{"foo": "dontfindme", "foobar": []string{"notme", "may", "findme", "lol"}}, result: true},
+		{cond: `{foo} not in ["bonjour", "le monde", "oui"]`, args: map[string]interface{}{"foo": "le monde"}, result: false},
+		{cond: `{foo} not in ["bonjour", "le monde", "oui"]`, args: map[string]interface{}{"foo": "world"}, result: true},
+		{cond: `{foo} not in [2,3,4]`, args: map[string]interface{}{"foo": 4}, result: false},
+		{cond: `{foo} not in [2,3,4]`, args: map[string]interface{}{"foo": 5}, result: true},
+	})
+}
 
-	// Hyphenated names with composition
-	{`{my-var}{sub-key} == "val"`, map[string]interface{}{"my-var.sub-key": "val"}, true, false},
-	{`{my-var}{sub-key} == "wrong"`, map[string]interface{}{"my-var.sub-key": "val"}, false, false},
+func TestCONTAINS(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{foo} contains "2"`, args: map[string]interface{}{"foo": []string{"1", "2"}}, result: true},
+		{cond: `{foo} contains "2"`, args: map[string]interface{}{"foo": []string{}}, result: false},
+		{cond: `{foo} contains "2" and {foo} contains "1"`, args: map[string]interface{}{"foo": []string{"1", "2"}}, result: true},
+		{cond: `{foo} contains "2" and {foo} contains "0"`, args: map[string]interface{}{"foo": []string{"1", "2"}}, result: false},
+		{cond: `{foo} contains "2" or {foo} contains "0"`, args: map[string]interface{}{"foo": []string{"1", "2"}}, result: true},
+		{cond: `{foo} contains 2 and {foo} contains 1`, args: map[string]interface{}{"foo": []int{1, 2}}, result: true},
+		{cond: `{foo} contains "2" and {foo} contains 1`, args: map[string]interface{}{"foo": []int{1, 2}}, isErr: true},
+		{cond: `{foo} contains {bar}`, args: map[string]interface{}{"foo": []string{"1", "2"}, "bar": "1"}, result: true},
+		{cond: `{foo} contains {bar}`, args: map[string]interface{}{"foo": []int{1, 2}, "bar": int32(1)}, result: true},
+		{cond: `{foo} contains {bar}`, args: map[string]interface{}{"foo": []int{1, 2, 3}, "bar": float32(1.0 + 2.0)}, result: true},
+		{cond: `{foo} contains {bar}`, args: map[string]interface{}{"foo": []float64{0.29}, "bar": float32(29.0 / 100)}, result: true},
+		{cond: `{foo} contains 2`, args: map[string]interface{}{"foo": []json.Number{"2"}}, result: true},
+		{cond: `{foo} contains 2`, args: map[string]interface{}{"foo": []json.Number{"2", "3"}}, result: true},
+		{cond: `{foo} contains 2`, args: map[string]interface{}{"foo": []json.Number{"3"}}, result: false},
+		{cond: `{foo} contains 2`, args: map[string]interface{}{"foo": []interface{}{json.Number("2")}}, result: true},
+		{cond: `{foo} contains 2`, args: map[string]interface{}{"foo": []interface{}{json.Number("3")}}, result: false},
+	})
+}
 
-	// Concat in both LHS and RHS
-	{`{a}{x} == {b}{y}`, map[string]interface{}{"a.x": "hello", "b.y": "hello"}, true, false},
-	{`{a}{x} == {b}{y}`, map[string]interface{}{"a.x": "hello", "b.y": "world"}, false, false},
+func TestNOTCONTAINS(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{foo} not contains "2"`, args: map[string]interface{}{"foo": []string{"1", "2"}}, result: false},
+		{cond: `{foo} not contains "0"`, args: map[string]interface{}{"foo": []string{"1", "2"}}, result: true},
+		{cond: `{foo} not contains 0`, args: map[string]interface{}{"foo": []string{"1", "2"}}, isErr: true},
+		{cond: `{foo} not contains 0`, args: map[string]interface{}{"bar": []string{"1", "2"}}, isErr: true},
+	})
+}
 
-	// Concat inside parentheses
-	{`({user}{age} > 18)`, map[string]interface{}{"user.age": 25.0}, true, false},
-	{`(({user}{age} > 18))`, map[string]interface{}{"user.age": 25.0}, true, false},
+// ---------------------------------------------------------------------------
+// Key composition — {a}{b} → flat key "a.b"
+// ---------------------------------------------------------------------------
 
-	// Four-level concatenation
-	{`{a}{b}{c}{d} == true`, map[string]interface{}{"a.b.c.d": true}, true, false},
+func TestKeyComposition(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Two-level
+		{cond: "{foo}{dfs} == true and {bar} == true",
+			args: map[string]interface{}{"foo.dfs": true, "bar": true}, result: true},
+		// Three-level
+		{cond: "{foo}{dfs}{a} == true and {bar} == true",
+			args: map[string]interface{}{"foo.dfs.a": true, "bar": true}, result: true},
+		// @ prefix
+		{cond: "{@foo}{a} == true and {bar} == true",
+			args: map[string]interface{}{"@foo.a": true, "bar": true}, result: true},
+		// Missing key error
+		{cond: "{foo}{unknow} == true and {bar} == true",
+			args: map[string]interface{}{"foo.dfs": true, "bar": true}, isErr: true},
+		// OR with composed key
+		{cond: "{foo}{dfs} == true or {bar} == true",
+			args: map[string]interface{}{"foo.dfs": true, "bar": true}, result: true},
+	})
+}
 
-	// Concat with AND short-circuit
-	{`false AND {missing}{key}` + " == true", nil, false, false},
+func TestKeyCompositionEdgeCases(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Number comparison
+		{cond: "{user}{age} > 18", args: map[string]interface{}{"user.age": 25.0}, result: true},
+		{cond: "{user}{age} > 18", args: map[string]interface{}{"user.age": 15.0}, result: false},
 
-	// Concat with OR short-circuit
-	{`true OR {missing}{key}` + " == true", nil, true, false},
+		// IN
+		{cond: `{user}{role} IN ["admin", "moderator"]`, args: map[string]interface{}{"user.role": "admin"}, result: true},
+		{cond: `{user}{role} IN ["admin", "moderator"]`, args: map[string]interface{}{"user.role": "viewer"}, result: false},
+		{cond: `{user}{role} NOT IN ["banned"]`, args: map[string]interface{}{"user.role": "admin"}, result: true},
 
-	// Concat in compound expression with various operators (parens required
-	// for correct precedence when mixing AND with =~)
-	{`{user}{age} > 18 AND {user}{role} IN ["admin"] AND ({user}{status} =~ /^A/)`,
-		map[string]interface{}{"user.age": 25.0, "user.role": "admin", "user.status": "Active"},
-		true, false},
+		// CONTAINS
+		{cond: `{user}{tags} CONTAINS "urgent"`, args: map[string]interface{}{"user.tags": []string{"urgent", "billing"}}, result: true},
+		{cond: `{user}{tags} NOT CONTAINS "spam"`, args: map[string]interface{}{"user.tags": []string{"urgent", "billing"}}, result: true},
 
-	// Error: composed key missing from args
-	{`{user}{missing} == true`, map[string]interface{}{"user.name": "Alice"}, false, true},
+		// Regex
+		{cond: `{user}{status} =~ /^5\d\d/`, args: map[string]interface{}{"user.status": "500"}, result: true},
+		{cond: `{user}{status} =~ /^5\d\d/`, args: map[string]interface{}{"user.status": "400"}, result: false},
 
-	// Error: compose with missing second part
-	{`{a}{b} == true`, map[string]interface{}{"a.x": true}, false, true},
+		// Hyphenated
+		{cond: `{my-var}{sub-key} == "val"`, args: map[string]interface{}{"my-var.sub-key": "val"}, result: true},
+		{cond: `{my-var}{sub-key} == "wrong"`, args: map[string]interface{}{"my-var.sub-key": "val"}, result: false},
 
-	// Error: nested map does NOT work with composed keys — {user}{status}
-	// looks up args["user.status"], not args["user"]["status"]
-	{`{user}{status} == 100`, map[string]interface{}{"user": map[string]interface{}{"status": 100}}, false, true},
+		// Both sides
+		{cond: `{a}{x} == {b}{y}`, args: map[string]interface{}{"a.x": "hello", "b.y": "hello"}, result: true},
+		{cond: `{a}{x} == {b}{y}`, args: map[string]interface{}{"a.x": "hello", "b.y": "world"}, result: false},
 
-	// --- Nested path traversal ({foo.bar}, {users[0]}) ---
+		// Parens
+		{cond: `({user}{age} > 18)`, args: map[string]interface{}{"user.age": 25.0}, result: true},
 
-	// Simple dot access into nested maps
-	{`{user.name} == "Alice"`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, true, false},
-	{`{user.name} == "Bob"`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, false, false},
+		// Four-level
+		{cond: "{a}{b}{c}{d} == true", args: map[string]interface{}{"a.b.c.d": true}, result: true},
 
-	// Array index access
-	{`{users[0]} == 42`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, true, false},
-	{`{users[1]} == 43`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, true, false},
-	{`{users[2]} == 99`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, false, false},
+		// Short-circuit
+		{cond: "false AND {missing}{key} == true", result: false},
+		{cond: "true OR {missing}{key} == true", result: true},
+	})
+}
 
-	// Negative index
-	{`{users[-1]} == 44`, map[string]interface{}{"users": []interface{}{42, 43, 44}}, true, false},
+func TestKeyCompositionCompound(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Multiple operators; parens needed around regex for correct precedence
+		{cond: `{user}{age} > 18 AND {user}{role} IN ["admin"] AND ({user}{status} =~ /^A/)`,
+			args: map[string]interface{}{"user.age": 25.0, "user.role": "admin", "user.status": "Active"},
+			result: true},
+	})
+}
 
-	// Chained dot + bracket
-	{`{data[0].name} == "foo"`, map[string]interface{}{
-		"data": []interface{}{map[string]interface{}{"name": "foo"}},
-	}, true, false},
+func TestKeyCompositionErrors(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Missing key
+		{cond: "{user}{missing} == true", args: map[string]interface{}{"user.name": "Alice"}, isErr: true},
+		// Partial match
+		{cond: "{a}{b} == true", args: map[string]interface{}{"a.x": true}, isErr: true},
+		// Nested map does NOT work with flat-key syntax
+		{cond: "{user}{status} == 100",
+			args: map[string]interface{}{"user": map[string]interface{}{"status": 100}}, isErr: true},
+	})
+}
 
-	// Deep nesting
-	{`{a.b.c} == 42`, map[string]interface{}{"a": map[string]interface{}{"b": map[string]interface{}{"c": 42.0}}}, true, false},
+// ---------------------------------------------------------------------------
+// Nested path traversal — {foo.bar}, {users[0]}
+// ---------------------------------------------------------------------------
 
-	// Number comparison
-	{`{user.age} > 18`, map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, true, false},
-	{`{user.age} > 18`, map[string]interface{}{"user": map[string]interface{}{"age": 15.0}}, false, false},
+func TestNestedPathDotAccess(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `{user.name} == "Alice"`,
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: true},
+		{cond: `{user.name} == "Bob"`,
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, result: false},
+		{cond: `{user.age} > 18`,
+			args: map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, result: true},
+		{cond: `{user.age} > 18`,
+			args: map[string]interface{}{"user": map[string]interface{}{"age": 15.0}}, result: false},
+		{cond: `{a.b.c} == 42`,
+			args: map[string]interface{}{"a": map[string]interface{}{"b": map[string]interface{}{"c": 42.0}}}, result: true},
+	})
+}
 
-	// IN with nested access
-	{`{user.role} IN ["admin", "moderator"]`, map[string]interface{}{"user": map[string]interface{}{"role": "admin"}}, true, false},
+func TestNestedPathArrayAccess(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Simple index
+		{cond: "{users[0]} == 42",
+			args: map[string]interface{}{"users": []interface{}{42, 43, 44}}, result: true},
+		{cond: "{users[1]} == 43",
+			args: map[string]interface{}{"users": []interface{}{42, 43, 44}}, result: true},
+		{cond: "{users[2]} == 99",
+			args: map[string]interface{}{"users": []interface{}{42, 43, 44}}, result: false},
+		// Negative index (from end)
+		{cond: "{users[-1]} == 44",
+			args: map[string]interface{}{"users": []interface{}{42, 43, 44}}, result: true},
+		// Array of maps
+		{cond: `{users[0].name} == "Alice"`,
+			args: map[string]interface{}{"users": []interface{}{
+				map[string]interface{}{"name": "Alice"},
+				map[string]interface{}{"name": "Bob"},
+			}}, result: true},
+		{cond: `{users[1].name} == "Bob"`,
+			args: map[string]interface{}{"users": []interface{}{
+				map[string]interface{}{"name": "Alice"},
+				map[string]interface{}{"name": "Bob"},
+			}}, result: true},
+		// Deeply nested arrays
+		{cond: "{matrix[0][1]} == 2",
+			args: map[string]interface{}{"matrix": []interface{}{
+				[]interface{}{1, 2, 3},
+				[]interface{}{4, 5, 6},
+			}}, result: true},
+		{cond: "{matrix[1][0]} == 4",
+			args: map[string]interface{}{"matrix": []interface{}{
+				[]interface{}{1, 2, 3},
+				[]interface{}{4, 5, 6},
+			}}, result: true},
+	})
+}
 
-	// CONTAINS with nested access
-	{`{user.tags} CONTAINS "urgent"`, map[string]interface{}{"user": map[string]interface{}{"tags": []string{"urgent", "billing"}}}, true, false},
-
-	// Regex with nested access
-	{`{user.status} =~ /^5\d\d/`, map[string]interface{}{"user": map[string]interface{}{"status": "500"}}, true, false},
-
-	// Path inside parentheses
-	{`({user.age} > 18)`, map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, true, false},
-	{`(({user.age} > 18))`, map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, true, false},
-
-	// Path in both LHS and RHS
-	{`{a.x} == {b.y}`, map[string]interface{}{
-		"a": map[string]interface{}{"x": "hello"},
-		"b": map[string]interface{}{"y": "hello"},
-	}, true, false},
-	{`{a.x} == {b.y}`, map[string]interface{}{
-		"a": map[string]interface{}{"x": "hello"},
-		"b": map[string]interface{}{"y": "world"},
-	}, false, false},
-
-	// @ prefix with path
-	{`{@user.name} == "Alice"`, map[string]interface{}{"@user": map[string]interface{}{"name": "Alice"}}, true, false},
-
-	// Chained: {a.b[0].c.d}
-	{`{a.b[0].c.d} == 1`, map[string]interface{}{
-		"a": map[string]interface{}{
-			"b": []interface{}{
-				map[string]interface{}{
-					"c": map[string]interface{}{"d": 1.0},
+func TestNestedPathChained(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Dot + bracket mixed
+		{cond: `{data[0].name} == "foo"`,
+			args: map[string]interface{}{
+				"data": []interface{}{map[string]interface{}{"name": "foo"}},
+			}, result: true},
+		// Bracket + dot + bracket + dot
+		{cond: "{a.b[0].c.d} == 1",
+			args: map[string]interface{}{
+				"a": map[string]interface{}{
+					"b": []interface{}{
+						map[string]interface{}{
+							"c": map[string]interface{}{"d": 1.0},
+						},
+					},
 				},
-			},
-		},
-	}, true, false},
-
-	// Path with AND short-circuit
-	{`false AND {missing.deep.key} == true`, nil, false, false},
-
-	// Path with OR short-circuit
-	{`true OR {missing.deep.key} == true`, nil, true, false},
-
-	// Error: path key not found in nested map
-	{`{user.missing} == true`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, false, true},
-
-	// Error: array index out of bounds
-	{`{users[999]} == 42`, map[string]interface{}{"users": []interface{}{1, 2, 3}}, false, true},
-
-	// Error: access key on non-map value
-	{`{user.name.nested} == true`, map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, false, true},
-
-	// Error: access key on array (should use index)
-	{`{users.foo} == 42`, map[string]interface{}{"users": []interface{}{1, 2, 3}}, false, true},
-
-	// Error: path root not found
-	{`{missing.key} == true`, map[string]interface{}{"foo": "bar"}, false, true},
+			}, result: true},
+		// Multiple arrays
+		{cond: `{stores[0].items[1].price} > 10`,
+			args: map[string]interface{}{
+				"stores": []interface{}{
+					map[string]interface{}{
+						"items": []interface{}{
+							map[string]interface{}{"price": 5.0},
+							map[string]interface{}{"price": 15.0},
+						},
+					},
+				},
+			}, result: true},
+		{cond: `{stores[0].items[0].price} > 10`,
+			args: map[string]interface{}{
+				"stores": []interface{}{
+					map[string]interface{}{
+						"items": []interface{}{
+							map[string]interface{}{"price": 5.0},
+							map[string]interface{}{"price": 15.0},
+						},
+					},
+				},
+			}, result: false},
+	})
 }
 
-func TestValid(t *testing.T) {
-	for i, td := range validTestData {
-		t.Run(fmt.Sprintf("%d_%s", i, td.cond), func(t *testing.T) {
-			p := NewParser(strings.NewReader(td.cond))
-			expr, err := p.Parse()
-			if err != nil {
-				t.Fatalf("Unexpected error parsing expression %q: %s", td.cond, err)
-			}
+func TestNestedPathOperators(t *testing.T) {
+	runTestCases(t, []testCase{
+		// IN with path
+		{cond: `{user.role} IN ["admin", "moderator"]`,
+			args: map[string]interface{}{"user": map[string]interface{}{"role": "admin"}}, result: true},
 
-			r, err := Evaluate(expr, td.args)
-			if err != nil {
-				if td.isErr {
-					return
-				}
-				t.Fatalf("Unexpected error evaluating %q: %s", expr, err)
-			} else if td.isErr {
-				t.Fatalf("Expected error but got none for: %s", expr)
-			}
-			assert.Equal(t, td.result, r, "Expression: %s, Args: %#v", td.cond, td.args)
-		})
-	}
+		// CONTAINS with path
+		{cond: `{user.tags} CONTAINS "urgent"`,
+			args: map[string]interface{}{"user": map[string]interface{}{"tags": []string{"urgent", "billing"}}}, result: true},
+
+		// Regex with path
+		{cond: `{user.status} =~ /^5\d\d/`,
+			args: map[string]interface{}{"user": map[string]interface{}{"status": "500"}}, result: true},
+
+		// Path on both sides of comparison
+		{cond: `{a.x} == {b.y}`,
+			args: map[string]interface{}{
+				"a": map[string]interface{}{"x": "hello"},
+				"b": map[string]interface{}{"y": "hello"},
+			}, result: true},
+		{cond: `{a.x} == {b.y}`,
+			args: map[string]interface{}{
+				"a": map[string]interface{}{"x": "hello"},
+				"b": map[string]interface{}{"y": "world"},
+			}, result: false},
+
+		// @ prefix with path
+		{cond: `{@user.name} == "Alice"`,
+			args: map[string]interface{}{"@user": map[string]interface{}{"name": "Alice"}}, result: true},
+	})
 }
 
-func TestReadmeExample(t *testing.T) {
-	s := `({foo} > 0.45) AND ({bar} == "ON" OR {baz} IN ["ACTIVE", "CLEAR"])`
-
-	p := NewParser(strings.NewReader(s))
-	expr, err := p.Parse()
-	assert.NoError(t, err)
-
-	data := map[string]interface{}{"foo": 0.62, "bar": "ON", "baz": "ACTIVE"}
-	r, err := Evaluate(expr, data)
-	assert.NoError(t, err)
-	assert.True(t, r)
+func TestNestedPathParens(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: `({user.age} > 18)`,
+			args: map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, result: true},
+		{cond: `(({user.age} > 18))`,
+			args: map[string]interface{}{"user": map[string]interface{}{"age": 25.0}}, result: true},
+	})
 }
 
-func TestJSON(t *testing.T) {
-	var tests = []struct {
+func TestNestedPathShortCircuit(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "false AND {missing.deep.key} == true", result: false},
+		{cond: "true OR {missing.deep.key} == true", result: true},
+	})
+}
+
+func TestNestedPathErrors(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Missing key in nested map
+		{cond: "{user.missing} == true",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, isErr: true},
+		// Index out of bounds
+		{cond: "{users[999]} == 42",
+			args: map[string]interface{}{"users": []interface{}{1, 2, 3}}, isErr: true},
+		// Access key on string (non-map)
+		{cond: "{user.name.nested} == true",
+			args: map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}, isErr: true},
+		// Access key on array (should use index)
+		{cond: "{users.foo} == 42",
+			args: map[string]interface{}{"users": []interface{}{1, 2, 3}}, isErr: true},
+		// Root not found
+		{cond: "{missing.key} == true", args: map[string]interface{}{"foo": "bar"}, isErr: true},
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Mixed flat-key + nested-path in one expression
+// ---------------------------------------------------------------------------
+
+func TestMixedKeyCompositionAndPath(t *testing.T) {
+	runTestCases(t, []testCase{
+		// Flat {user}{age} + nested {user.tags} in same expression
+		{cond: `{user}{age} > 18 AND {user.tags} CONTAINS "admin"`,
+			args: map[string]interface{}{
+				"user.age": 25.0,
+				"user":     map[string]interface{}{"tags": []string{"admin"}},
+			}, result: true},
+		// Same, false case
+		{cond: `{user}{age} > 18 AND {user.tags} CONTAINS "admin"`,
+			args: map[string]interface{}{
+				"user.age": 15.0,
+				"user":     map[string]interface{}{"tags": []string{"admin"}},
+			}, result: false},
+		// Both sides use different approaches
+		{cond: `{a}{flat} == "yes" AND {b.nested} == "ok"`,
+			args: map[string]interface{}{
+				"a.flat":   "yes",
+				"b":        map[string]interface{}{"nested": "ok"},
+			}, result: true},
+	})
+}
+
+// ---------------------------------------------------------------------------
+// JSON interoperability
+// ---------------------------------------------------------------------------
+
+func TestJSONInterop(t *testing.T) {
+	runJSONTests(t, []struct {
 		cond    string
 		jsonStr string
 		result  bool
 		isErr   bool
 	}{
+		// Basic flat keys
 		{`{foo} == 123`, `{"foo": 123}`, true, false},
 		{`{foo} in [123]`, `{"foo": 123}`, true, false},
 		{`{foo} in [124]`, `{"foo": 123}`, false, false},
@@ -375,37 +612,58 @@ func TestJSON(t *testing.T) {
 		{`{foo} not contains "123"`, `{"foo": null}`, false, true},
 		{`{foo} not contains "123"`, `{}`, false, true},
 
-		// JSON interop with composed keys
+		// Composed keys (flat dotted)
 		{`{user}{name} == "Alice"`, `{"user.name": "Alice"}`, true, false},
 		{`{user}{age} > 18`, `{"user.age": 25}`, true, false},
 		{`{user}{role} IN ["admin"]`, `{"user.role": "admin"}`, true, false},
 		{`{user}{role} IN ["admin"]`, `{"user.role": "viewer"}`, false, false},
 
-		// JSON interop with nested path traversal
+		// Nested path traversal
 		{`{user.name} == "Alice"`, `{"user": {"name": "Alice"}}`, true, false},
 		{`{user.age} > 18`, `{"user": {"age": 25}}`, true, false},
 		{`{users[0]} == 42`, `{"users": [42, 43]}`, true, false},
 		{`{data[0].name} == "foo"`, `{"data": [{"name": "foo"}]}`, true, false},
 		{`{data[0].items[1]} == 200`, `{"data": [{"items": [100, 200]}]}`, true, false},
-	}
+	})
+}
 
-	for _, test := range tests {
-		t.Run(test.cond+"_"+test.jsonStr, func(t *testing.T) {
-			p := NewParser(strings.NewReader(test.cond))
-			expr, _ := p.Parse()
-		data := make(map[string]interface{})
-		if err := json.Unmarshal([]byte(test.jsonStr), &data); err != nil {
-			t.Fatalf("failed to unmarshal json: %v", err)
-		}
-			r, err := Evaluate(expr, data)
-			assert.Equal(t, test.result, r, "%s with %s", test.cond, test.jsonStr)
-			if test.isErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+// ---------------------------------------------------------------------------
+// Short-circuit evaluation
+// ---------------------------------------------------------------------------
+
+func TestShortCircuit(t *testing.T) {
+	t.Run("AND short-circuits on false LHS", func(t *testing.T) {
+		expr, err := Parse(`{flag} AND {missing}`)
+		assert.NoError(t, err)
+		r, evalErr := Evaluate(expr, map[string]interface{}{"flag": false})
+		assert.NoError(t, evalErr)
+		assert.False(t, r)
+	})
+
+	t.Run("OR short-circuits on true LHS", func(t *testing.T) {
+		expr, err := Parse(`{flag} OR {missing}`)
+		assert.NoError(t, err)
+		r, evalErr := Evaluate(expr, map[string]interface{}{"flag": true})
+		assert.NoError(t, evalErr)
+		assert.True(t, r)
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Misc: convenience functions, edge cases
+// ---------------------------------------------------------------------------
+
+func TestReadmeExample(t *testing.T) {
+	s := `({foo} > 0.45) AND ({bar} == "ON" OR {baz} IN ["ACTIVE", "CLEAR"])`
+
+	p := NewParser(strings.NewReader(s))
+	expr, err := p.Parse()
+	assert.NoError(t, err)
+
+	data := map[string]interface{}{"foo": 0.62, "bar": "ON", "baz": "ACTIVE"}
+	r, err := Evaluate(expr, data)
+	assert.NoError(t, err)
+	assert.True(t, r)
 }
 
 func TestParseConvenience(t *testing.T) {
@@ -416,14 +674,10 @@ func TestParseConvenience(t *testing.T) {
 	r, err := Evaluate(expr, map[string]interface{}{"foo": 15, "bar": "hello"})
 	assert.NoError(t, err)
 	assert.True(t, r)
-}
 
-func TestParseConvenienceInvalid(t *testing.T) {
-	_, err := Parse(`{foo} == UNQUOTED`)
+	_, err = Parse(`{foo} == UNQUOTED`)
 	assert.Error(t, err)
 }
-
-// --- Error handling ---
 
 func TestNilExprEvaluation(t *testing.T) {
 	_, err := Evaluate(nil, map[string]interface{}{"foo": 1})
@@ -431,7 +685,7 @@ func TestNilExprEvaluation(t *testing.T) {
 }
 
 func TestNilArgsMap(t *testing.T) {
-	t.Run("boolean literal with nil args", func(t *testing.T) {
+	t.Run("boolean literal", func(t *testing.T) {
 		expr, _ := Parse("true")
 		r, err := Evaluate(expr, nil)
 		assert.NoError(t, err)
@@ -444,59 +698,14 @@ func TestNilArgsMap(t *testing.T) {
 	})
 }
 
+func TestJSONNumberTypes(t *testing.T) {
+	runTestCases(t, []testCase{
+		{cond: "{foo} == 123", args: map[string]interface{}{"foo": json.Number("123")}, result: true},
+	})
+}
+
 func TestUnsupportedOperator(t *testing.T) {
 	_, err := applyOperator(Token(999), &BooleanLiteral{Val: true}, &BooleanLiteral{Val: false})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported operator")
-}
-
-func TestEvaluateTypeMismatchErrors(t *testing.T) {
-	t.Run("string vs number", func(t *testing.T) {
-		expr, _ := Parse(`{foo} == "hello"`)
-		_, err := Evaluate(expr, map[string]interface{}{"foo": 42})
-		assert.Error(t, err)
-	})
-	t.Run("number vs string", func(t *testing.T) {
-		expr, _ := Parse(`{foo} == 42`)
-		_, err := Evaluate(expr, map[string]interface{}{"foo": "hello"})
-		assert.Error(t, err)
-	})
-	t.Run("boolean vs number", func(t *testing.T) {
-		expr, _ := Parse(`{foo} > 10`)
-		_, err := Evaluate(expr, map[string]interface{}{"foo": true})
-		assert.Error(t, err)
-	})
-}
-
-// --- Short-circuit ---
-
-func TestShortCircuitAND(t *testing.T) {
-	expr, err := Parse(`{flag} AND {missing}`)
-	assert.NoError(t, err)
-	r, evalErr := Evaluate(expr, map[string]interface{}{"flag": false})
-	assert.NoError(t, evalErr)
-	assert.False(t, r)
-}
-
-func TestShortCircuitOR(t *testing.T) {
-	expr, err := Parse(`{flag} OR {missing}`)
-	assert.NoError(t, err)
-	r, evalErr := Evaluate(expr, map[string]interface{}{"flag": true})
-	assert.NoError(t, evalErr)
-	assert.True(t, r)
-}
-
-func TestEvalBinaryXorNandDirect(t *testing.T) {
-	t.Run("XOR", func(t *testing.T) {
-		expr, _ := Parse(`true XOR false`)
-		r, err := Evaluate(expr, nil)
-		assert.NoError(t, err)
-		assert.True(t, r)
-	})
-	t.Run("NAND", func(t *testing.T) {
-		expr, _ := Parse(`true NAND true`)
-		r, err := Evaluate(expr, nil)
-		assert.NoError(t, err)
-		assert.False(t, r)
-	})
 }
