@@ -31,14 +31,13 @@ import (
 )
 
 func main() {
-    // Parse once — use {field.subfield} for nested data, {field}{subfield} for flat
+    // Parse once — the AST is immutable and safe to reuse across goroutines
     expr, err := conditions.Parse(`{product.price} > 100 AND {product.in_stock}`)
     if err != nil {
         panic(err)
     }
 
-    // Evaluate many times — thread-safe, reuse across goroutines
-    // Data can use nested maps (from JSON, API responses, etc.)
+    // Evaluate many times — works with nested data (from JSON, API responses, etc.)
     data := map[string]interface{}{
         "product": map[string]interface{}{
             "price":    150.00,
@@ -51,26 +50,7 @@ func main() {
 }
 ```
 
-**Parse once, evaluate many times** — the parsed AST is immutable and safe to share:
-
-```go
-expr, _ := conditions.Parse(`{price} > 1000`)
-
-for _, order := range orders {
-    go func(o Order) {
-        ok, _ := conditions.Evaluate(expr, map[string]interface{}{
-            "price": o.Price,
-        })
-        if ok {
-            flagForReview(o)
-        }
-    }(order)
-}
-```
-
 ### From a JSON string
-
-When your data arrives as JSON, unmarshal it first, then evaluate against it:
 
 ```go
 import (
@@ -80,21 +60,18 @@ import (
 
 jsonStr := `{"user": {"name": "Alice", "age": 25, "tags": ["admin", "billing"]}}`
 
-// Step 1: Unmarshal JSON into a map
 var data map[string]interface{}
 json.Unmarshal([]byte(jsonStr), &data)
 
-// Step 2: Parse the condition
 expr, _ := conditions.Parse(
     `{user.name} == "Alice" AND {user.age} > 18 AND {user.tags} CONTAINS "admin"`,
 )
 
-// Step 3: Evaluate
 ok, _ := conditions.Evaluate(expr, data)
 // ok == true
 ```
 
-The path traversal syntax (`{user.name}`, `{user.tags}`) was designed to match the nested structure that `json.Unmarshal` produces — no data transformation needed.
+The path syntax (`{user.name}`, `{user.tags}`) matches the nested structure that `json.Unmarshal` produces — no data transformation needed.
 
 ---
 
@@ -114,11 +91,10 @@ The path traversal syntax (`{user.name}`, `{user.tags}`) was designed to match t
 
 Variables reference values from the `args` map using `{curly braces}`.
 
-**Simple reference** — a single brace group maps directly to a map key:
+**Simple reference** — maps directly to a map key:
 
 ```
 {foo}   → args["foo"]
-{count} → args["count"]
 ```
 
 ```go
@@ -127,14 +103,14 @@ ok, _ := conditions.Evaluate(expr, map[string]interface{}{"status": "active"})
 // ok == true
 ```
 
-**Composing keys** — consecutive brace groups join with `.` into a single key:
+**Composing keys** (`{a}{b}`) — consecutive brace groups join with `.` into a single key:
 
 ```
 {foo}{bar}      → args["foo.bar"]
 {foo}{bar}{baz} → args["foo.bar.baz"]
 ```
 
-This is useful for **namespacing** or grouping related values without nesting your data:
+Useful for **namespacing** without nesting your data:
 
 ```go
 expr, _ := conditions.Parse(
@@ -147,9 +123,9 @@ ok, _ := conditions.Evaluate(expr, map[string]interface{}{
 // ok == true
 ```
 
-> **How it works:** At parse time, consecutive `{...}` groups are detected and concatenated into a single dotted key. The evaluation does a flat map lookup — `args["user.name"]`.
+Consecutive `{...}` groups are joined at parse time. The result is a flat map lookup — `args["user.name"]`.
 
-**Nested path traversal** — use dots and brackets inside a single brace group to traverse nested maps and arrays:
+**Nested path traversal** (`{a.b}`, `{users[0]}`) — use dots and brackets inside a single brace group:
 
 ```
 {user.name}       → args["user"]["name"]
@@ -159,10 +135,9 @@ ok, _ := conditions.Evaluate(expr, map[string]interface{}{
 {users[-1]}       → args["users"][len-1]   (negative index = from end)
 ```
 
-This works naturally with JSON data from external APIs:
+Works naturally with JSON data:
 
 ```go
-// Data from json.Unmarshal — nested maps and arrays
 data := map[string]interface{}{
     "user": map[string]interface{}{
         "name": "Alice",
@@ -171,28 +146,23 @@ data := map[string]interface{}{
     },
 }
 
-expr, _ := conditions.Parse(
-    `{user.name} == "Alice" AND {user.age} > 18`,
-)
+expr, _ := conditions.Parse(`{user.name} == "Alice" AND {user.age} > 18`)
 ok, _ := conditions.Evaluate(expr, data)
 // ok == true
 
-// Array access
 expr2, _ := conditions.Parse(`{user.tags[0]} == "admin"`)
 ok2, _ := conditions.Evaluate(expr2, data)
 // ok2 == true
 ```
 
-> **How it works:** At parse time, dots `.` and brackets `[` inside `{...}` are parsed as path traversal steps. At evaluation time, the resolver walks through nested maps (`map[string]interface{}`) and slices (`[]interface{}`) — exactly what `json.Unmarshal` produces.
+Dots and brackets inside `{...}` are parsed as traversal steps. The resolver walks through `map[string]interface{}` and `[]interface{}` — exactly what `json.Unmarshal` produces.
 
-**`@` prefix** — brace groups starting with `@` keep the `@` in the key:
+**`@` prefix** — brace groups starting with `@` keep the `@` in the key (for env-style namespacing):
 
 ```
 {@env}{key}  → args["@env.key"]
 {@env.name}  → args["@env"]["name"]
 ```
-
-Useful for namespacing under a well-known prefix (e.g., environment variables).
 
 **Hyphens** — variable names can contain hyphens:
 
@@ -203,19 +173,15 @@ Useful for namespacing under a well-known prefix (e.g., environment variables).
 
 #### Two approaches to structured data
 
-`conditions` gives you two ways to work with structured data, and you can mix both in one expression:
-
 | Approach | Syntax | Data shape | Example |
 |---|---|---|---|
 | **Composed keys** | `{a}{b}` | Flat: `{"a.b": val}` | `{user}{name} == "Alice"` |
 | **Path traversal** | `{a.b}` | Nested: `{"a": {"b": val}}` | `{user.name} == "Alice"` |
 
-**Choose based on how your data arrives:**
+- **Path traversal** (`{user.name}`) — use when consuming JSON. `json.Unmarshal` produces nested `map[string]interface{}` / `[]interface{}` which the resolver walks directly. No data preprocessing.
+- **Composed keys** (`{user}{name}`) — use when you control the data shape. Flat maps are simpler and support more Go types (`[]int`, `json.Number`, etc.) directly.
 
-- **Path traversal** (`{user.name}`) — use when consuming JSON from external APIs. `json.Unmarshal` produces nested `map[string]interface{}` and `[]interface{}` which this syntax traverses directly. No data preprocessing needed.
-- **Composed keys** (`{user}{name}`) — use when you control the data shape and want flat, simple maps. Best for configs, feature flags, or when you want to avoid nesting overhead.
-
-**You can even mix both in one expression:**
+**Mix both in one expression:**
 
 ```go
 expr, _ := conditions.Parse(
@@ -235,7 +201,7 @@ expr, _ := conditions.Parse(
 | `XOR` | Exactly one true | `{a} XOR {b}` |
 | `NAND` | Not both true | `{a} NAND {b}` |
 
-`AND` and `OR` short-circuit — if the left side determines the result, the right side is never evaluated. This is especially useful when the right side would error on missing variables:
+`AND` and `OR` short-circuit — if the left side determines the result, the right side is skipped. This prevents errors from missing variables:
 
 ```go
 expr, _ := conditions.Parse(`{enabled} AND {missing_var}`)
@@ -259,7 +225,7 @@ ok, err := conditions.Evaluate(expr, map[string]interface{}{"enabled": false})
 Numbers use epsilon-based equality (default `1e-6`) for floating-point tolerance:
 
 ```go
-conditions.SetDefaultEpsilon(1e-9) // optional: change global tolerance
+conditions.SetDefaultEpsilon(1e-9) // change global tolerance
 ```
 
 **Pattern Matching:**
@@ -296,8 +262,6 @@ Without parentheses, operator precedence is: `OR`/`XOR` < `AND`/`NAND` < compari
 
 ## Supported Types
 
-The `args` map accepts these Go types:
-
 | Go Type | Treated As |
 |---------|-----------|
 | `int`, `int8`–`int64` | Number |
@@ -317,8 +281,7 @@ The `args` map accepts these Go types:
 ## API
 
 ```go
-// Parse a condition string into an AST expression.
-// The result is immutable and thread-safe.
+// Parse a condition string into an AST expression (immutable, thread-safe).
 func Parse(condition string) (Expr, error)
 
 // Or use a parser with a custom io.Reader.
@@ -332,7 +295,7 @@ func Evaluate(expr Expr, args map[string]interface{}) (bool, error)
 // Call before any concurrent Evaluate calls.
 func SetDefaultEpsilon(ep float64)
 
-// Extract the list of variable names referenced in an expression.
+// Extract variable names referenced in an expression.
 func Variables(expression Expr) []string
 
 // Walk the AST tree with a visitor function.
