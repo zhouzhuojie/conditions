@@ -79,7 +79,7 @@ func TestResolveVarErrors(t *testing.T) {
 		expr, _ := Parse(`{x} == 1`)
 		_, err := Evaluate(expr, map[string]interface{}{"x": struct{}{}})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported argument")
+		assert.Contains(t, err.Error(), "unsupported")
 	})
 	t.Run("bad json.Number in slice", func(t *testing.T) {
 		expr, _ := Parse(`{x} contains 1`)

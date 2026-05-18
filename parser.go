@@ -22,6 +22,9 @@ type Parser struct {
 		tt  string // token text
 		n   int    // buffer size (max=1)
 	}
+	// Temporary buffer for path expression segments, set by scanArg when
+	// parsing {foo.bar[0]}-style nested references.
+	pathBuf []PathStep
 }
 
 // NewParser returns a new instance of Parser.
@@ -89,12 +92,16 @@ func (p *Parser) scanWithMapping() (Token, string) {
 	case scanner.Float, scanner.Int:
 		tok = NUMBER
 	case '{':
-		var err error
-		_, tt, err = p.scanArg()
+		varName, segments, err := p.scanArg()
 		if err != nil {
 			tok = ILLEGAL
+		} else if len(segments) > 0 {
+			tok = PATH
+			tt = varName
+			p.pathBuf = segments
 		} else {
 			tok = IDENT
+			tt = varName
 		}
 	case '[':
 		var err error
@@ -279,6 +286,10 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 	switch tok {
 	case IDENT:
 		return &VarRef{Val: lit}, nil
+	case PATH:
+		ref := &PathRef{Root: lit, Steps: p.pathBuf}
+		p.pathBuf = nil
+		return ref, nil
 	case STRING:
 		if len(lit) < 2 {
 			return nil, fmt.Errorf("invalid string literal: %s", lit)
@@ -349,24 +360,44 @@ func (p *Parser) scanArray() (rune, string, error) {
 // scanArg extracts {variable} to variable,
 // {variable}{key1}{key2} to variable.key1.key2,
 // handles variable names starting with "@".
-func (p *Parser) scanArg() (rune, string, error) {
+// For path expressions like {foo.bar} or {users[0]}, it returns
+// the root name and populates p.pathBuf with traversal steps.
+func (p *Parser) scanArg() (string, []PathStep, error) {
 	var builder strings.Builder
 	sep := ""
+	first := true
 
 	for {
 		t, ttTmp := p.scan()
 		if t == scanner.EOF {
-			return t, builder.String(), fmt.Errorf("unexpected EOF in variable reference, missing }")
+			return builder.String(), nil, fmt.Errorf("unexpected EOF in variable reference, missing }")
 		}
 		builder.WriteString(sep)
 		builder.WriteString(ttTmp)
+
 		if t == '@' {
+			// @ is a prefix character — keep reading the actual variable name
 			continue
 		}
 		t, _ = p.scan()
 		if t == scanner.EOF {
-			return t, builder.String(), fmt.Errorf("unexpected EOF in variable reference, missing }")
+			return builder.String(), nil, fmt.Errorf("unexpected EOF in variable reference, missing }")
 		}
+
+		// If this is the first ident and the next char is '.' or '[',
+		// parse as a path expression (e.g. {foo.bar}, {users[0]}).
+		if first && (t == '.' || t == '[') {
+			root := builder.String()
+			// The delimiter (. or [) was already consumed by the ahead read.
+			// Pass it so scanPathSegments knows which type to expect first.
+			segments, err := p.scanPathSegments(t)
+			if err != nil {
+				return "", nil, err
+			}
+			return root, segments, nil
+		}
+		first = false
+
 		// Allow variables to contain "-"
 		if t == '-' {
 			sep = "-"
@@ -379,13 +410,100 @@ func (p *Parser) scanArg() (rune, string, error) {
 				continue
 			}
 			p.unscan()
-			return t, builder.String(), nil
+			return builder.String(), nil, nil
 		}
 
 		if t != '}' {
-			return t, builder.String(), fmt.Errorf("args error")
+			return builder.String(), nil, fmt.Errorf("args error")
 		}
 	}
+}
+
+// scanPathSegments parses path segments starting after the root identifier
+// in a path expression. It is called when scanArg detects '.' or '[' after
+// the first identifier. The first delimiter ('.' or '[') was already consumed
+// by scanArg and passed as `delim`.
+//
+// It handles chained segments: .key, [index], .key[index].key, etc.
+func (p *Parser) scanPathSegments(delim rune) ([]PathStep, error) {
+	var segments []PathStep
+
+	// Parse the first segment introduced by delim.
+	switch delim {
+	case '.':
+		tKey, key := p.scan()
+		if tKey == scanner.EOF {
+			return nil, fmt.Errorf("unexpected EOF in path expression")
+		}
+		if tKey != scanner.Ident {
+			return nil, fmt.Errorf("expected identifier after '.', got %q", key)
+		}
+		segments = append(segments, PathStep{Key: key})
+
+	case '[':
+		idx, err := p.scanIndex()
+		if err != nil {
+			return nil, err
+		}
+		segments = append(segments, PathStep{IsIndex: true, Index: idx})
+	}
+
+	// Parse any remaining segments.
+	for {
+		t, tt := p.scan()
+		if t == scanner.EOF {
+			return nil, fmt.Errorf("unexpected EOF in path expression")
+		}
+
+		switch {
+		case t == '.':
+			tKey, key := p.scan()
+			if tKey == scanner.EOF {
+				return nil, fmt.Errorf("unexpected EOF in path expression")
+			}
+			if tKey != scanner.Ident {
+				return nil, fmt.Errorf("expected identifier after '.', got %q", key)
+			}
+			segments = append(segments, PathStep{Key: key})
+
+		case t == '[':
+			idx, err := p.scanIndex()
+			if err != nil {
+				return nil, err
+			}
+			segments = append(segments, PathStep{IsIndex: true, Index: idx})
+
+		case t == '}':
+			return segments, nil
+
+		default:
+			return nil, fmt.Errorf("unexpected token in path expression: %q", tt)
+		}
+	}
+}
+
+// scanIndex reads an integer array index inside brackets, e.g. "0" or "-1".
+// The opening '[' must already have been consumed.
+func (p *Parser) scanIndex() (int, error) {
+	var idxStr strings.Builder
+	for {
+		tIdx, idxPart := p.scan()
+		if tIdx == scanner.EOF {
+			return 0, fmt.Errorf("unexpected EOF in array index")
+		}
+		if tIdx == ']' {
+			break
+		}
+		idxStr.WriteString(idxPart)
+	}
+	if idxStr.Len() == 0 {
+		return 0, fmt.Errorf("empty array index")
+	}
+	idx, err := strconv.Atoi(idxStr.String())
+	if err != nil {
+		return 0, fmt.Errorf("invalid array index %q", idxStr.String())
+	}
+	return idx, nil
 }
 
 

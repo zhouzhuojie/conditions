@@ -56,3 +56,28 @@ func TestWalkParenExpr(t *testing.T) {
 	assert.Contains(t, nodes, "foo")
 	assert.Contains(t, nodes, "1.000")
 }
+
+func TestWalkPathRef(t *testing.T) {
+	expr, err := Parse(`{user.name} == "Alice"`)
+	assert.NoError(t, err)
+
+	var count int
+	WalkFunc(expr, func(n Node) {
+		if _, ok := n.(*PathRef); ok {
+			count++
+		}
+	})
+	assert.Equal(t, 1, count)
+}
+
+func TestWalkPathRefChained(t *testing.T) {
+	expr, err := Parse(`{data[0].name} == "foo"`)
+	assert.NoError(t, err)
+
+	var nodes []string
+	WalkFunc(expr, func(n Node) {
+		nodes = append(nodes, n.String())
+	})
+	assert.Contains(t, nodes, "data[0].name")
+	assert.Contains(t, nodes, `"foo"`)
+}

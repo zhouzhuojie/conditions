@@ -227,3 +227,86 @@ func BenchmarkVariables(b *testing.B) {
 		Variables(expr)
 	}
 }
+
+// --- Path traversal benchmarks ---
+
+func BenchmarkPathDotAccess(b *testing.B) {
+	cond := `{user.name} == "Alice"`
+	args := map[string]interface{}{"user": map[string]interface{}{"name": "Alice"}}
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPathArrayAccess(b *testing.B) {
+	cond := `{users[0]} == 42`
+	args := map[string]interface{}{"users": []interface{}{42, 43, 44}}
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPathChained(b *testing.B) {
+	cond := `{data[0].name} == "foo"`
+	args := map[string]interface{}{
+		"data": []interface{}{map[string]interface{}{"name": "foo"}},
+	}
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPathDeep(b *testing.B) {
+	cond := `{a.b.c} == 42`
+	args := map[string]interface{}{
+		"a": map[string]interface{}{"b": map[string]interface{}{"c": 42.0}},
+	}
+	p := NewParser(strings.NewReader(cond))
+	expr, err := p.Parse()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPathParseOnly(b *testing.B) {
+	cond := `{user.name} == "Alice" AND {user.age} > 18`
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		_, _ = NewParser(strings.NewReader(cond)).Parse()
+	}
+}

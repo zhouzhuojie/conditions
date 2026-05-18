@@ -24,6 +24,8 @@ func collectVars(n Node, seen map[string]struct{}) {
 	switch node := n.(type) {
 	case *VarRef:
 		seen[node.Val] = struct{}{}
+	case *PathRef:
+		seen[node.Root] = struct{}{}
 	case *BinaryExpr:
 		collectVars(node.LHS, seen)
 		collectVars(node.RHS, seen)
