@@ -976,3 +976,137 @@ func TestUnsupportedOperator(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported operator")
 }
+
+func TestStringEscapeSequences(t *testing.T) {
+	// String literals with escape sequences should be properly unescaped.
+	// Previously, the parser used the raw content between quotes, so
+	// "he said \"hey\"" would produce `he said \"hey\"` (with literal
+	// backslash) instead of `he said "hey"` (with actual quote chars).
+	t.Run("double-quote escape", func(t *testing.T) {
+		expr, err := Parse(`{s} == "he said \"hey\""`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": `he said "hey"`})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("backslash escape", func(t *testing.T) {
+		expr, err := Parse(`{s} == "path\\to\\file"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": `path\to\file`})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Invalid Go escapes like \d, \. fall back to raw content for
+	// backward compatibility (used in EREG patterns).
+	t.Run("invalid escape fallback", func(t *testing.T) {
+		expr, err := Parse(`{s} =~ "\d+"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "123"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Simple strings without escapes should still work.
+	t.Run("simple string", func(t *testing.T) {
+		expr, err := Parse(`{s} == "hello"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "hello"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Regex literals /.../ should be unaffected.
+	t.Run("regex literal", func(t *testing.T) {
+		expr, err := Parse(`{s} =~ /\d+/`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "123"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// EREG with quoted string containing invalid escape + valid escape
+	t.Run("mixed escapes in EREG", func(t *testing.T) {
+		// \. is invalid Go escape → falls back to raw content
+		// regex engine interprets \. as literal dot → correct
+		expr, err := Parse(`{s} =~ ".+@example\.com"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "user@example.com"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Valid Go escapes that were previously treated as raw text
+	// should now produce their interpreted values.
+	t.Run("newline escape \\n", func(t *testing.T) {
+		expr, err := Parse("{s} == \"\\n\"")
+		assert.NoError(t, err)
+		// Match against real newline
+		result, err := Evaluate(expr, map[string]any{"s": "\n"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		// Should NOT match literal backslash-n
+		result, err = Evaluate(expr, map[string]any{"s": "\\n"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("tab escape \\t", func(t *testing.T) {
+		expr, err := Parse("{s} == \"\\t\"")
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "\t"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		result, err = Evaluate(expr, map[string]any{"s": "\\t"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("carriage return escape \\r", func(t *testing.T) {
+		expr, err := Parse("{s} == \"\\r\"")
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "\r"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("hex escape \\x41 produces A", func(t *testing.T) {
+		expr, err := Parse(`{s} == "\x41"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "A"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		result, err = Evaluate(expr, map[string]any{"s": "\\x41"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unicode escape \\u0041 produces A", func(t *testing.T) {
+		expr, err := Parse(`{s} == "\u0041"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "A"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unicode escape \\U00000041 produces A", func(t *testing.T) {
+		expr, err := Parse(`{s} == "\U00000041"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "A"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Empty string should still work
+	t.Run("empty string", func(t *testing.T) {
+		expr, err := Parse(`{s} == ""`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": ""})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		result, err = Evaluate(expr, map[string]any{"s": "x"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+}

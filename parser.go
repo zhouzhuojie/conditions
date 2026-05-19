@@ -294,6 +294,18 @@ func (p *Parser) parseUnaryExpr() (Expr, error) {
 		if len(lit) < 2 {
 			return nil, fmt.Errorf("invalid string literal: %s", lit)
 		}
+		// String literals ("..."): properly interpret Go escape sequences
+		// so that \" and \\ are correctly unescaped to " and \.
+		if lit[0] == '"' && lit[len(lit)-1] == '"' {
+			unquoted, err := strconv.Unquote(lit)
+			if err != nil {
+				// Invalid Go escape sequences (e.g. \d, \.) — fall back
+				// to raw content for backward compatibility.
+				return &StringLiteral{Val: lit[1 : len(lit)-1]}, nil
+			}
+			return &StringLiteral{Val: unquoted}, nil
+		}
+		// Regex literals (/.../): use raw content between delimiters.
 		return &StringLiteral{Val: lit[1 : len(lit)-1]}, nil
 	case NUMBER:
 		v, err := strconv.ParseFloat(lit, 64)
