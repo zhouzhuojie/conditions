@@ -976,3 +976,64 @@ func TestUnsupportedOperator(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported operator")
 }
+
+func TestStringEscapeSequences(t *testing.T) {
+	// String literals with escape sequences should be properly unescaped.
+	// Previously, the parser used the raw content between quotes, so
+	// "he said \"hey\"" would produce `he said \"hey\"` (with literal
+	// backslash) instead of `he said "hey"` (with actual quote chars).
+	t.Run("double-quote escape", func(t *testing.T) {
+		expr, err := Parse(`{s} == "he said \"hey\""`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": `he said "hey"`})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("backslash escape", func(t *testing.T) {
+		expr, err := Parse(`{s} == "path\\to\\file"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": `path\to\file`})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Invalid Go escapes like \d, \. fall back to raw content for
+	// backward compatibility (used in EREG patterns).
+	t.Run("invalid escape fallback", func(t *testing.T) {
+		expr, err := Parse(`{s} =~ "\d+"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "123"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Simple strings without escapes should still work.
+	t.Run("simple string", func(t *testing.T) {
+		expr, err := Parse(`{s} == "hello"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "hello"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Regex literals /.../ should be unaffected.
+	t.Run("regex literal", func(t *testing.T) {
+		expr, err := Parse(`{s} =~ /\d+/`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "123"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// EREG with quoted string containing invalid escape + valid escape
+	t.Run("mixed escapes in EREG", func(t *testing.T) {
+		// \. is invalid Go escape → falls back to raw content
+		// regex engine interprets \. as literal dot → correct
+		expr, err := Parse(`{s} =~ ".+@example\.com"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "user@example.com"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+}
