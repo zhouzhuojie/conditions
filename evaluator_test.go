@@ -1036,4 +1036,77 @@ func TestStringEscapeSequences(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, result)
 	})
+
+	// Valid Go escapes that were previously treated as raw text
+	// should now produce their interpreted values.
+	t.Run("newline escape \\n", func(t *testing.T) {
+		expr, err := Parse("{s} == \"\\n\"")
+		assert.NoError(t, err)
+		// Match against real newline
+		result, err := Evaluate(expr, map[string]any{"s": "\n"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		// Should NOT match literal backslash-n
+		result, err = Evaluate(expr, map[string]any{"s": "\\n"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("tab escape \\t", func(t *testing.T) {
+		expr, err := Parse("{s} == \"\\t\"")
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "\t"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		result, err = Evaluate(expr, map[string]any{"s": "\\t"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("carriage return escape \\r", func(t *testing.T) {
+		expr, err := Parse("{s} == \"\\r\"")
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "\r"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("hex escape \\x41 produces A", func(t *testing.T) {
+		expr, err := Parse(`{s} == "\x41"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "A"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		result, err = Evaluate(expr, map[string]any{"s": "\\x41"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
+
+	t.Run("unicode escape \\u0041 produces A", func(t *testing.T) {
+		expr, err := Parse(`{s} == "\u0041"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "A"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	t.Run("unicode escape \\U00000041 produces A", func(t *testing.T) {
+		expr, err := Parse(`{s} == "\U00000041"`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": "A"})
+		assert.NoError(t, err)
+		assert.True(t, result)
+	})
+
+	// Empty string should still work
+	t.Run("empty string", func(t *testing.T) {
+		expr, err := Parse(`{s} == ""`)
+		assert.NoError(t, err)
+		result, err := Evaluate(expr, map[string]any{"s": ""})
+		assert.NoError(t, err)
+		assert.True(t, result)
+		result, err = Evaluate(expr, map[string]any{"s": "x"})
+		assert.NoError(t, err)
+		assert.False(t, result)
+	})
 }
