@@ -308,31 +308,27 @@ func WalkFunc(expr Expr, fn func(Node))
 
 ## Performance
 
-Benchmarked on Apple M1 Max; **allocs/op** from `go test -benchmem` on linux/arm64 for eval workloads.
+Benchmarked on Apple M1 Max:
 
-| Operation | Time (typical) | Allocs per `Evaluate` |
-|-----------|----------------|------------------------|
-| Short-circuit (`false AND ...`) | 6 ns/op | 0 |
-| Simple comparison (`{foo} == "hello"`) | ~40 ns/op | 1 |
-| Boolean operators (`{a} AND {b} OR {c}`) | ~47 ns/op | **0** (was 3 on `master`) |
-| Numeric comparison (`{foo} > 100 AND < 200`) | ~90 ns/op | 2 |
-| Multi-scalar segment (4 bindings) | ~200 ns/op | ≤6 (`BenchmarkEvalMultiScalarVar`) |
-| Regex match (`{status} =~ /^5\d\d/`) | ~80 ns/op | (see `BenchmarkRegexMatch`) |
-| String IN 5-element array | ~40 ns/op | (see `BenchmarkShortSliceIN`) |
-| String IN 10,000-element array | ~41 ns/op | (see `BenchmarkLongSliceString`) |
-| `CONTAINS` check | ~155 ns/op | (see `BenchmarkContains`) |
-| `Variables()` extraction | ~143 ns/op | (see `BenchmarkVariables`) |
-| Full expression parse | ~1.1 μs/op | parse-only (`BenchmarkParseOnly`) |
+| Operation | Time | Memory |
+|-----------|------|---------|
+| Short-circuit (`false AND ...`) | 6 ns/op | 0 B/op |
+| Simple comparison (`{foo} == "hello"`) | 33 ns/op | 16 B/op |
+| Boolean operators (`{a} AND {b} OR {c}`) | 57 ns/op | 3 B/op |
+| Numeric comparison (`{foo} > 100 AND < 200`) | 60 ns/op | 16 B/op |
+| Regex match (`{status} =~ /^5\d\d/`) | 80 ns/op | 16 B/op |
+| String IN 5-element array | 40 ns/op | 16 B/op |
+| String IN 10,000-element array | 41 ns/op | 16 B/op |
+| `CONTAINS` check | 155 ns/op | 288 B/op |
+| `Variables()` extraction | 143 ns/op | 64 B/op |
+| Full expression parse | 1.1 μs/op | 1896 B/op |
 
 **Key optimizations:**
-- **Eval literal pool** — resolved `string`/`number` context values use per-`Evaluate` slice storage instead of heap-allocated `*StringLiteral` / `*NumberLiteral`; `bool` args reuse `trueExpr`/`falseExpr`
 - String array hash map — `IN`/`CONTAINS` is O(1) regardless of array size
 - Regex caching — patterns compiled once, reused across evaluations
 - Short-circuit evaluation — `AND`/`OR` skip unnecessary work
 - Boolean singletons — no allocations for boolean results
 - Optimized `Variables()` — direct AST walk (44% faster than original)
-
-Reproduce alloc deltas: `go test -benchmem -bench='BenchmarkBooleanOperators|BenchmarkEvalMultiScalarVar' ./...` and `go test -run=TestEvalAlloc ./...`.
 
 ---
 

@@ -6,7 +6,7 @@ import (
 )
 
 // resolveVar looks up a variable in args and converts it to the appropriate literal.
-func resolveVar(name string, args map[string]interface{}, pool *evalPool) (Expr, error) {
+func resolveVar(name string, args map[string]interface{}) (Expr, error) {
 	val, ok := args[name]
 	if !ok {
 		return falseExpr, fmt.Errorf("argument: %v not found", name)
@@ -14,7 +14,7 @@ func resolveVar(name string, args map[string]interface{}, pool *evalPool) (Expr,
 	if val == nil {
 		return falseExpr, fmt.Errorf("unsupported argument nil type for %s", name)
 	}
-	return valueToExpr(val, pool)
+	return valueToExpr(val)
 }
 
 // resolvePathRef resolves a nested path expression by walking through
@@ -23,7 +23,7 @@ func resolveVar(name string, args map[string]interface{}, pool *evalPool) (Expr,
 //	{user.name}    → args["user"]["name"]
 //	{users[0]}     → args["users"][0]
 //	{data[0].name} → args["data"][0]["name"]
-func resolvePathRef(ref *PathRef, args map[string]interface{}, pool *evalPool) (Expr, error) {
+func resolvePathRef(ref *PathRef, args map[string]interface{}) (Expr, error) {
 	current, ok := args[ref.Root]
 	if !ok {
 		return falseExpr, fmt.Errorf("argument: %v not found", ref.Root)
@@ -63,36 +63,57 @@ func resolvePathRef(ref *PathRef, args map[string]interface{}, pool *evalPool) (
 	if current == nil {
 		return falseExpr, fmt.Errorf("nil value at end of path %s", ref.Root)
 	}
-	return valueToExpr(current, pool)
+	return valueToExpr(current)
 }
 
 // valueToExpr converts a Go value to an AST literal expression.
-func valueToExpr(val interface{}, pool *evalPool) (Expr, error) {
+func valueToExpr(val interface{}) (Expr, error) {
 	if val == nil {
 		return falseExpr, fmt.Errorf("unsupported nil type")
 	}
 
 	switch v := val.(type) {
-	// Numeric scalars
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32:
-		return pool.numberFrom(v), nil
+	// Signed integers
+	case int:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case int8:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case int16:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case int32:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case int64:
+		return &NumberLiteral{Val: float64(v)}, nil
+
+	// Unsigned integers
+	case uint:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case uint8:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case uint16:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case uint32:
+		return &NumberLiteral{Val: float64(v)}, nil
+	case uint64:
+		return &NumberLiteral{Val: float64(v)}, nil
+
+	// Floats
+	case float32:
+		return &NumberLiteral{Val: float64(v)}, nil
 	case float64:
-		return pool.numberLit(v), nil
+		return &NumberLiteral{Val: v}, nil
 
 	// Scalars
 	case string:
-		return pool.stringLit(v), nil
+		return &StringLiteral{Val: v}, nil
 	case bool:
-		if v {
-			return trueExpr, nil
-		}
-		return falseExpr, nil
+		return &BooleanLiteral{Val: v}, nil
 	case json.Number:
 		f, err := v.Float64()
 		if err != nil {
 			return falseExpr, fmt.Errorf("unsupported JSON Number %v: %s", val, err)
 		}
-		return pool.numberLit(f), nil
+		return &NumberLiteral{Val: f}, nil
 
 	// Typed slices — fast paths
 	case []string:
