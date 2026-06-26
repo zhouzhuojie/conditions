@@ -14,7 +14,8 @@ func Evaluate(expr Expr, args map[string]interface{}) (bool, error) {
 		return false, fmt.Errorf("provided expression is nil")
 	}
 
-	result, err := evaluate(expr, args)
+	var pool evalPool
+	result, err := evaluate(expr, args, &pool)
 	if err != nil {
 		return false, err
 	}
@@ -25,19 +26,19 @@ func Evaluate(expr Expr, args map[string]interface{}) (bool, error) {
 }
 
 // evaluate recursively evaluates an expression tree.
-func evaluate(expr Expr, args map[string]interface{}) (Expr, error) {
+func evaluate(expr Expr, args map[string]interface{}, pool *evalPool) (Expr, error) {
 	switch n := expr.(type) {
 	case *ParenExpr:
-		return evaluate(n.Expr, args)
+		return evaluate(n.Expr, args, pool)
 
 	case *BinaryExpr:
-		return evalBinary(n, args)
+		return evalBinary(n, args, pool)
 
 	case *VarRef:
-		return resolveVar(n.Val, args)
+		return resolveVar(n.Val, args, pool)
 
 	case *PathRef:
-		return resolvePathRef(n, args)
+		return resolvePathRef(n, args, pool)
 
 	default:
 		// Literal — return as-is
@@ -46,9 +47,9 @@ func evaluate(expr Expr, args map[string]interface{}) (Expr, error) {
 }
 
 // evalBinary handles short-circuit logic for AND/OR, then delegates to applyOperator.
-func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
+func evalBinary(n *BinaryExpr, args map[string]interface{}, pool *evalPool) (Expr, error) {
 	if n.Op == AND {
-		lv, err := evaluate(n.LHS, args)
+		lv, err := evaluate(n.LHS, args, pool)
 		if err != nil {
 			return falseExpr, err
 		}
@@ -59,7 +60,7 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		if !lb {
 			return falseExpr, nil
 		}
-		rv, err := evaluate(n.RHS, args)
+		rv, err := evaluate(n.RHS, args, pool)
 		if err != nil {
 			return falseExpr, err
 		}
@@ -71,7 +72,7 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 	}
 
 	if n.Op == OR {
-		lv, err := evaluate(n.LHS, args)
+		lv, err := evaluate(n.LHS, args, pool)
 		if err != nil {
 			return falseExpr, err
 		}
@@ -82,7 +83,7 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		if lb {
 			return trueExpr, nil
 		}
-		rv, err := evaluate(n.RHS, args)
+		rv, err := evaluate(n.RHS, args, pool)
 		if err != nil {
 			return falseExpr, err
 		}
@@ -93,11 +94,11 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		return boolExpr(rb), nil
 	}
 
-	lv, err := evaluate(n.LHS, args)
+	lv, err := evaluate(n.LHS, args, pool)
 	if err != nil {
 		return falseExpr, err
 	}
-	rv, err := evaluate(n.RHS, args)
+	rv, err := evaluate(n.RHS, args, pool)
 	if err != nil {
 		return falseExpr, err
 	}

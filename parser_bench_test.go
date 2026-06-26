@@ -310,3 +310,22 @@ func BenchmarkPathParseOnly(b *testing.B) {
 		_, _ = NewParser(strings.NewReader(cond)).Parse()
 	}
 }
+
+// BenchmarkEvalMultiScalarVar stresses per-Evaluate literal pooling (Flagr-like
+// segment with several string/number context bindings).
+func BenchmarkEvalMultiScalarVar(b *testing.B) {
+	cond := `({a} == "x" AND {b} == 1) AND ({c} == "y" AND {d} == 2)`
+	args := map[string]interface{}{
+		"a": "x", "b": 1, "c": "y", "d": 2,
+	}
+	expr, err := Parse(cond)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		if _, err := Evaluate(expr, args); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
