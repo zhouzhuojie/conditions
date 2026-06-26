@@ -73,33 +73,9 @@ func valueToExpr(val interface{}, pool *evalPool) (Expr, error) {
 	}
 
 	switch v := val.(type) {
-	// Signed integers
-	case int:
-		return pool.numberLit(float64(v)), nil
-	case int8:
-		return pool.numberLit(float64(v)), nil
-	case int16:
-		return pool.numberLit(float64(v)), nil
-	case int32:
-		return pool.numberLit(float64(v)), nil
-	case int64:
-		return pool.numberLit(float64(v)), nil
-
-	// Unsigned integers
-	case uint:
-		return pool.numberLit(float64(v)), nil
-	case uint8:
-		return pool.numberLit(float64(v)), nil
-	case uint16:
-		return pool.numberLit(float64(v)), nil
-	case uint32:
-		return pool.numberLit(float64(v)), nil
-	case uint64:
-		return pool.numberLit(float64(v)), nil
-
-	// Floats
-	case float32:
-		return pool.numberLit(float64(v)), nil
+	// Numeric scalars
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32:
+		return pool.numberFrom(v), nil
 	case float64:
 		return pool.numberLit(v), nil
 

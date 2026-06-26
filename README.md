@@ -308,21 +308,21 @@ func WalkFunc(expr Expr, fn func(Node))
 
 ## Performance
 
-Benchmarked on Apple M1 Max (linux/arm64 numbers from `go test -benchmem` on the same workloads):
+Benchmarked on Apple M1 Max; **allocs/op** from `go test -benchmem` on linux/arm64 for eval workloads.
 
-| Operation | Time | Allocs (eval) |
-|-----------|------|----------------|
-| Short-circuit (`false AND ...`) | 6 ns/op | 0 allocs/op |
-| Simple comparison (`{foo} == "hello"`) | ~40 ns/op | 1 alloc/op |
-| Boolean operators (`{a} AND {b} OR {c}`) | ~47 ns/op | **0 allocs/op** (was 3) |
-| Numeric comparison (`{foo} > 100 AND < 200`) | ~90 ns/op | 2 allocs/op |
-| Multi-scalar segment (4 bindings) | see `BenchmarkEvalMultiScalarVar` | pooled literals |
-| Regex match (`{status} =~ /^5\d\d/`) | 80 ns/op | 16 B/op |
-| String IN 5-element array | 40 ns/op | 16 B/op |
-| String IN 10,000-element array | 41 ns/op | 16 B/op |
-| `CONTAINS` check | 155 ns/op | 288 B/op |
-| `Variables()` extraction | 143 ns/op | 64 B/op |
-| Full expression parse | 1.1 μs/op | 1896 B/op |
+| Operation | Time (typical) | Allocs per `Evaluate` |
+|-----------|----------------|------------------------|
+| Short-circuit (`false AND ...`) | 6 ns/op | 0 |
+| Simple comparison (`{foo} == "hello"`) | ~40 ns/op | 1 |
+| Boolean operators (`{a} AND {b} OR {c}`) | ~47 ns/op | **0** (was 3 on `master`) |
+| Numeric comparison (`{foo} > 100 AND < 200`) | ~90 ns/op | 2 |
+| Multi-scalar segment (4 bindings) | ~200 ns/op | ≤6 (`BenchmarkEvalMultiScalarVar`) |
+| Regex match (`{status} =~ /^5\d\d/`) | ~80 ns/op | (see `BenchmarkRegexMatch`) |
+| String IN 5-element array | ~40 ns/op | (see `BenchmarkShortSliceIN`) |
+| String IN 10,000-element array | ~41 ns/op | (see `BenchmarkLongSliceString`) |
+| `CONTAINS` check | ~155 ns/op | (see `BenchmarkContains`) |
+| `Variables()` extraction | ~143 ns/op | (see `BenchmarkVariables`) |
+| Full expression parse | ~1.1 μs/op | parse-only (`BenchmarkParseOnly`) |
 
 **Key optimizations:**
 - **Eval literal pool** — resolved `string`/`number` context values use per-`Evaluate` slice storage instead of heap-allocated `*StringLiteral` / `*NumberLiteral`; `bool` args reuse `trueExpr`/`falseExpr`
