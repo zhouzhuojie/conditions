@@ -308,14 +308,15 @@ func WalkFunc(expr Expr, fn func(Node))
 
 ## Performance
 
-Benchmarked on Apple M1 Max:
+Benchmarked on Apple M1 Max (linux/arm64 numbers from `go test -benchmem` on the same workloads):
 
-| Operation | Time | Memory |
-|-----------|------|---------|
-| Short-circuit (`false AND ...`) | 6 ns/op | 0 B/op |
-| Simple comparison (`{foo} == "hello"`) | 33 ns/op | 16 B/op |
-| Boolean operators (`{a} AND {b} OR {c}`) | 57 ns/op | 3 B/op |
-| Numeric comparison (`{foo} > 100 AND < 200`) | 60 ns/op | 16 B/op |
+| Operation | Time | Allocs (eval) |
+|-----------|------|----------------|
+| Short-circuit (`false AND ...`) | 6 ns/op | 0 allocs/op |
+| Simple comparison (`{foo} == "hello"`) | ~40 ns/op | 1 alloc/op |
+| Boolean operators (`{a} AND {b} OR {c}`) | ~47 ns/op | **0 allocs/op** (was 3) |
+| Numeric comparison (`{foo} > 100 AND < 200`) | ~90 ns/op | 2 allocs/op |
+| Multi-scalar segment (4 bindings) | see `BenchmarkEvalMultiScalarVar` | pooled literals |
 | Regex match (`{status} =~ /^5\d\d/`) | 80 ns/op | 16 B/op |
 | String IN 5-element array | 40 ns/op | 16 B/op |
 | String IN 10,000-element array | 41 ns/op | 16 B/op |
@@ -324,11 +325,14 @@ Benchmarked on Apple M1 Max:
 | Full expression parse | 1.1 μs/op | 1896 B/op |
 
 **Key optimizations:**
+- **Eval literal pool** — resolved `string`/`number` context values use per-`Evaluate` slice storage instead of heap-allocated `*StringLiteral` / `*NumberLiteral`; `bool` args reuse `trueExpr`/`falseExpr`
 - String array hash map — `IN`/`CONTAINS` is O(1) regardless of array size
 - Regex caching — patterns compiled once, reused across evaluations
 - Short-circuit evaluation — `AND`/`OR` skip unnecessary work
 - Boolean singletons — no allocations for boolean results
 - Optimized `Variables()` — direct AST walk (44% faster than original)
+
+Reproduce alloc deltas: `go test -benchmem -bench='BenchmarkBooleanOperators|BenchmarkEvalMultiScalarVar' ./...` and `go test -run=TestEvalAlloc ./...`. See `docs/benchmark-eval-pool.md`.
 
 ---
 

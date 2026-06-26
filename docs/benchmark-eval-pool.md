@@ -1,24 +1,31 @@
 # Evaluate literal pool — benchmarks
 
-Compare allocation behavior on `master` vs `perf/eval-literal-pool`:
+Measured on **linux/arm64** with `go test -benchmem -count=3 ./...`.
+
+## vs `master` (pre-pool)
+
+| Benchmark | master | this branch |
+|-----------|--------|-------------|
+| `BenchmarkBooleanOperators` (`{a} AND {b} OR {c}`, bool args) | **3 allocs/op**, 3 B/op, ~69 ns/op | **0 allocs/op**, 0 B/op, ~46 ns/op |
+| `BenchmarkSimpleComparison` (`{foo} == "hello"`) | 1 alloc/op, 16 B/op, ~40 ns/op | 1 alloc/op, 16 B/op, ~44 ns/op |
+| `BenchmarkNumericComparison` | 2 allocs/op, 16 B/op, ~74 ns/op | 2 allocs/op, 24 B/op, ~91 ns/op |
+| `BenchmarkEvalMultiScalarVar` (4 scalar bindings, parenthesized) | — | ~205 ns/op, 4 allocs/op, 72 B/op |
+
+The largest win is **boolean context values**: resolving `true`/`false` from `args` no longer allocates `&BooleanLiteral{}` per variable.
+
+Scalar string/number literals are stored in per-`Evaluate` `evalPool` slices instead of separate heap objects; remaining allocs are mostly map/interface and comparison overhead.
+
+## Reproduce
 
 ```bash
-# Current branch
-go test -bench='Benchmark(BooleanOperators|SimpleComparison|NumericComparison|EvalMultiScalarVar)' -benchmem -count=3 ./...
-
-# Baseline (master)
-git stash -q 2>/dev/null; git checkout master
-go test -bench='Benchmark(BooleanOperators|SimpleComparison|NumericComparison)' -benchmem -count=3 ./...
-git checkout -
-git stash pop -q 2>/dev/null
+go test -bench='Benchmark(BooleanOperators|SimpleComparison|EvalMultiScalarVar)' -benchmem -count=3 ./...
+go test -run='TestEvalAlloc' -v ./...
 ```
 
-## What improved
+Compare to `master`:
 
-| Benchmark | Expected gain |
-|-----------|----------------|
-| `BenchmarkBooleanOperators` | **0 allocs/op** — context `bool` values use `trueExpr`/`falseExpr` instead of `&BooleanLiteral{}` |
-| `BenchmarkSimpleComparison` / path access | Fewer tiny heap allocs for resolved `string`/`number` (pooled in `evalPool` slices); `B/op` may still show string/map overhead |
-| `BenchmarkEvalMultiScalarVar` | Several resolved scalars per eval — compare `allocs/op` vs pre-pool master (rebuild benchmark on master or use `testing.AllocsPerRun` in `eval_alloc_test.go`) |
-
-Run `go test -run='TestEvalAlloc'` for regression guards on allocs.
+```bash
+git checkout master
+go test -bench=BenchmarkBooleanOperators -benchmem -count=3 ./...
+git checkout perf/eval-literal-pool
+```

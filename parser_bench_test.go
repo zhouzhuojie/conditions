@@ -314,7 +314,7 @@ func BenchmarkPathParseOnly(b *testing.B) {
 // BenchmarkEvalMultiScalarVar stresses per-Evaluate literal pooling (Flagr-like
 // segment with several string/number context bindings).
 func BenchmarkEvalMultiScalarVar(b *testing.B) {
-	cond := `{a} == "x" AND {b} == 1 AND {c} == "y" AND {d} == 2`
+	cond := `({a} == "x" AND {b} == 1) AND ({c} == "y" AND {d} == 2)`
 	args := map[string]interface{}{
 		"a": "x", "b": 1, "c": "y", "d": 2,
 	}
