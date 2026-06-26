@@ -332,7 +332,7 @@ Benchmarked on Apple M1 Max (linux/arm64 numbers from `go test -benchmem` on the
 - Boolean singletons — no allocations for boolean results
 - Optimized `Variables()` — direct AST walk (44% faster than original)
 
-Reproduce alloc deltas: `go test -benchmem -bench='BenchmarkBooleanOperators|BenchmarkEvalMultiScalarVar' ./...` and `go test -run=TestEvalAlloc ./...`. See `docs/benchmark-eval-pool.md`.
+Reproduce alloc deltas: `go test -benchmem -bench='BenchmarkBooleanOperators|BenchmarkEvalMultiScalarVar' ./...` and `go test -run=TestEvalAlloc ./...`.
 
 ---
 
