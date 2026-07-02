@@ -373,7 +373,7 @@ func TestKeyCompositionCompound(t *testing.T) {
 	runTestCases(t, []testCase{
 		// Multiple operators; parens needed around regex for correct precedence
 		{cond: `{user}{age} > 18 AND {user}{role} IN ["admin"] AND ({user}{status} =~ /^A/)`,
-			args: map[string]interface{}{"user.age": 25.0, "user.role": "admin", "user.status": "Active"},
+			args:   map[string]interface{}{"user.age": 25.0, "user.role": "admin", "user.status": "Active"},
 			result: true},
 	})
 }
@@ -656,8 +656,8 @@ func TestMixedKeyCompositionAndPath(t *testing.T) {
 		// Both sides use different approaches
 		{cond: `{a}{flat} == "yes" AND {b.nested} == "ok"`,
 			args: map[string]interface{}{
-				"a.flat":   "yes",
-				"b":        map[string]interface{}{"nested": "ok"},
+				"a.flat": "yes",
+				"b":      map[string]interface{}{"nested": "ok"},
 			}, result: true},
 	})
 }

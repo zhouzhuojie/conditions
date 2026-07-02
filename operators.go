@@ -114,30 +114,23 @@ func applyEREG(l, r Expr) (*BooleanLiteral, error) {
 // --- Membership (IN / CONTAINS) ---
 
 func applyIN(l, r Expr) (*BooleanLiteral, error) {
-	switch l.(type) {
+	switch lv := l.(type) {
 	case *StringLiteral:
-		a, err := getString(l)
-		if err != nil {
-			return nil, err
+		switch rv := r.(type) {
+		case *SliceStringLiteral:
+			_, found := rv.m[lv.Val]
+			return boolExpr(found), nil
+		default:
+			return nil, fmt.Errorf("literal is not a slice of string: %v", r)
 		}
-		b, err := getMapString(r)
-		if err != nil {
-			return nil, err
-		}
-		_, found := b[a]
-		return boolExpr(found), nil
 
 	case *NumberLiteral:
-		a, err := getNumber(l)
-		if err != nil {
-			return nil, err
+		sl, ok := r.(*SliceNumberLiteral)
+		if !ok {
+			return nil, fmt.Errorf("literal is not a slice of float64: %v", r)
 		}
-		b, err := getSliceNumber(r)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range b {
-			if float64Equal(a, e) {
+		for _, e := range sl.Val {
+			if float64Equal(lv.Val, e) {
 				return trueExpr, nil
 			}
 		}
