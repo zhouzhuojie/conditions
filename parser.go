@@ -517,5 +517,3 @@ func (p *Parser) scanIndex() (int, error) {
 	}
 	return idx, nil
 }
-
-

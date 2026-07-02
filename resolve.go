@@ -107,7 +107,7 @@ func valueToExpr(val interface{}) (Expr, error) {
 	case string:
 		return &StringLiteral{Val: v}, nil
 	case bool:
-		return &BooleanLiteral{Val: v}, nil
+		return boolExpr(v), nil
 	case json.Number:
 		f, err := v.Float64()
 		if err != nil {

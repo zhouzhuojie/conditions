@@ -52,9 +52,13 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		if err != nil {
 			return falseExpr, err
 		}
-		lb, err := getBoolean(lv)
-		if err != nil {
-			return nil, err
+		lb, ok := booleanFromExpr(lv)
+		if !ok {
+			var err error
+			lb, err = getBoolean(lv)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if !lb {
 			return falseExpr, nil
@@ -63,9 +67,13 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		if err != nil {
 			return falseExpr, err
 		}
-		rb, err := getBoolean(rv)
-		if err != nil {
-			return nil, err
+		rb, ok := booleanFromExpr(rv)
+		if !ok {
+			var err error
+			rb, err = getBoolean(rv)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return boolExpr(rb), nil
 	}
@@ -75,9 +83,13 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		if err != nil {
 			return falseExpr, err
 		}
-		lb, err := getBoolean(lv)
-		if err != nil {
-			return nil, err
+		lb, ok := booleanFromExpr(lv)
+		if !ok {
+			var err error
+			lb, err = getBoolean(lv)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if lb {
 			return trueExpr, nil
@@ -86,9 +98,13 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		if err != nil {
 			return falseExpr, err
 		}
-		rb, err := getBoolean(rv)
-		if err != nil {
-			return nil, err
+		rb, ok := booleanFromExpr(rv)
+		if !ok {
+			var err error
+			rb, err = getBoolean(rv)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return boolExpr(rb), nil
 	}
@@ -102,6 +118,14 @@ func evalBinary(n *BinaryExpr, args map[string]interface{}) (Expr, error) {
 		return falseExpr, err
 	}
 	return applyOperator(n.Op, lv, rv)
+}
+
+// booleanFromExpr returns (value, true) when e is a *BooleanLiteral.
+func booleanFromExpr(e Expr) (bool, bool) {
+	if b, ok := e.(*BooleanLiteral); ok {
+		return b.Val, true
+	}
+	return false, false
 }
 
 // boolExpr returns the singleton boolean literal.

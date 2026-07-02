@@ -248,7 +248,7 @@ Patterns are compiled once and cached automatically (thread-safe).
 | `CONTAINS` | Array contains value | `{tags} CONTAINS "urgent"` |
 | `NOT CONTAINS` | Array lacks value | `{tags} NOT CONTAINS "spam"` |
 
-`IN` and `CONTAINS` are O(1) for string arrays (backed by a hash map).
+`IN` and `CONTAINS` are O(1) for string arrays (hash map on the array literal — in the parsed rule for `IN ["a","b"]`, or built when binding `[]string` from `args` each evaluation).
 
 ### Parentheses
 
@@ -277,6 +277,7 @@ Without parentheses, operator precedence is: `OR`/`XOR` < `AND`/`NAND` < compari
 | `[]float32`, `[]float64` | Number array |
 | `[]json.Number` | Number array |
 | `[]interface{}` | Auto-detected (from JSON) |
+
 
 ---
 
@@ -308,20 +309,21 @@ func WalkFunc(expr Expr, fn func(Node))
 
 ## Performance
 
-Benchmarked on Apple M1 Max:
+Benchmarked on **linux/arm64** (parse once per benchmark, then `Evaluate` in loop; `go test -benchmem`):
 
 | Operation | Time | Memory |
-|-----------|------|---------|
-| Short-circuit (`false AND ...`) | 6 ns/op | 0 B/op |
-| Simple comparison (`{foo} == "hello"`) | 33 ns/op | 16 B/op |
-| Boolean operators (`{a} AND {b} OR {c}`) | 57 ns/op | 3 B/op |
-| Numeric comparison (`{foo} > 100 AND < 200`) | 60 ns/op | 16 B/op |
-| Regex match (`{status} =~ /^5\d\d/`) | 80 ns/op | 16 B/op |
-| String IN 5-element array | 40 ns/op | 16 B/op |
-| String IN 10,000-element array | 41 ns/op | 16 B/op |
-| `CONTAINS` check | 155 ns/op | 288 B/op |
-| `Variables()` extraction | 143 ns/op | 64 B/op |
-| Full expression parse | 1.1 μs/op | 1896 B/op |
+|-----------|------|--------|
+| Short-circuit (`false AND ...`) | 7 ns/op | 0 B/op |
+| Simple comparison (`{foo} == "hello"`) | 44 ns/op | 16 B/op |
+| Boolean operators (`{a} AND {b} OR {c}`) | 46 ns/op | 0 B/op |
+| Numeric comparison (`{foo} > 100 AND < 200`) | 74 ns/op | 16 B/op |
+| Regex match (`{status} =~ /^5\d\d/`) | 101 ns/op | 16 B/op |
+| String IN 5-element array | 48 ns/op | 16 B/op |
+| String IN 10,000-element array | 49 ns/op | 16 B/op |
+| `CONTAINS` check (`[]string` from args) | 200 ns/op | 288 B/op |
+| Nested path (`{user.name} == "Alice"`) | 50 ns/op | 16 B/op |
+| `Variables()` extraction | 172 ns/op | 64 B/op |
+| Full expression parse | 1.5 μs/op | 1896 B/op |
 
 **Key optimizations:**
 - String array hash map — `IN`/`CONTAINS` is O(1) regardless of array size
